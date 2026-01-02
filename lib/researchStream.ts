@@ -332,30 +332,88 @@ export class MockResearchStream implements ResearchStream {
 
 export class APIResearchStream implements ResearchStream {
   private apiUrl: string;
+  private getToken?: () => string | null;
 
-  constructor(apiUrl?: string) {
+  constructor(apiUrl?: string, getToken?: () => string | null) {
     this.apiUrl =
       apiUrl || process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+    this.getToken = getToken;
   }
 
   async *stream(
     query: string,
     clarificationResponse?: string
   ): AsyncGenerator<SSEEvent> {
-    let response: Response;
+    const headers: Record<string, string> = {
+      "Content-Type": "application/json",
+      Accept: "text/event-stream",
+    };
 
+    const token = this.getToken?.();
+    if (token) {
+      headers.Authorization = `Bearer ${token}`;
+    }
+
+    let response: Response;
     try {
       response = await fetch(`${this.apiUrl}/api/research`, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Accept: "text/event-stream",
-        },
+        headers,
         body: JSON.stringify({
           query,
           clarification_response: clarificationResponse || null,
         }),
       });
+
+      if (!response.ok) {
+        yield {
+          type: "error",
+          data: {
+            code: "RESEARCH_FAILED",
+            message: `Backend returned error: ${response.status}`,
+            recoverable: true,
+          },
+        };
+        return;
+      }
+
+      const reader = response.body?.getReader();
+      if (!reader) {
+        yield {
+          type: "error",
+          data: {
+            code: "INTERNAL_ERROR",
+            message: "No response body from backend",
+            recoverable: false,
+          },
+        };
+        return;
+      }
+
+      const decoder = new TextDecoder();
+      let buffer = "";
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+        buffer = lines.pop() || "";
+
+        for (const line of lines) {
+          if (line.startsWith("data: ")) {
+            const jsonStr = line.slice(6);
+            if (jsonStr.trim()) {
+              const raw = JSON.parse(jsonStr);
+              const transformed = this.transformEvent(raw);
+              if (transformed) {
+                yield transformed;
+              }
+            }
+          }
+        }
+      }
     } catch (error) {
       yield {
         type: "error",
@@ -368,56 +426,6 @@ export class APIResearchStream implements ResearchStream {
         },
       };
       return;
-    }
-
-    if (!response.ok) {
-      yield {
-        type: "error",
-        data: {
-          code: "RESEARCH_FAILED",
-          message: `Backend returned error: ${response.status}`,
-          recoverable: true,
-        },
-      };
-      return;
-    }
-
-    const reader = response.body?.getReader();
-    if (!reader) {
-      yield {
-        type: "error",
-        data: {
-          code: "INTERNAL_ERROR",
-          message: "No response body from backend",
-          recoverable: false,
-        },
-      };
-      return;
-    }
-
-    const decoder = new TextDecoder();
-    let buffer = "";
-
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-
-      buffer += decoder.decode(value, { stream: true });
-      const lines = buffer.split("\n");
-      buffer = lines.pop() || "";
-
-      for (const line of lines) {
-        if (line.startsWith("data: ")) {
-          const jsonStr = line.slice(6);
-          if (jsonStr.trim()) {
-            const raw = JSON.parse(jsonStr);
-            const transformed = this.transformEvent(raw);
-            if (transformed) {
-              yield transformed;
-            }
-          }
-        }
-      }
     }
   }
 
@@ -444,14 +452,30 @@ export class APIResearchStream implements ResearchStream {
           },
         };
 
+      case "clarification":
       case "clarification_needed":
+        const clarificationData = raw.data as
+          | Record<string, unknown>
+          | undefined;
         return {
           type: "clarification",
           data: {
-            thread_id: "",
-            refined_query: raw.refined_query as string,
-            questions: raw.questions as string[],
-            suggestions: [],
+            thread_id:
+              (clarificationData?.thread_id as string) ||
+              (raw.thread_id as string) ||
+              "",
+            refined_query:
+              (clarificationData?.refined_query as string) ||
+              (raw.refined_query as string) ||
+              "",
+            questions:
+              (clarificationData?.questions as string[]) ||
+              (raw.questions as string[]) ||
+              [],
+            suggestions:
+              (clarificationData?.suggestions as string[]) ||
+              (raw.suggestions as string[]) ||
+              [],
           },
         };
 
