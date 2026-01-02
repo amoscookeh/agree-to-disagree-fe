@@ -26,7 +26,9 @@ export function ClarificationPrompt({
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-2xl font-bold mb-2">Let's clarify your question</h2>
+        <h2 className="text-2xl font-bold mb-2">
+          Let&apos;s clarify your question
+        </h2>
         <p className="text-zinc-400">
           To provide the most accurate research, I need a bit more detail.
         </p>

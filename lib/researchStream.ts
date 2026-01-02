@@ -15,10 +15,7 @@ export interface ResearchStream {
 }
 
 export class MockResearchStream implements ResearchStream {
-  async *stream(
-    query: string,
-    clarificationResponse?: string
-  ): AsyncGenerator<SSEEvent> {
+  async *stream(query: string): AsyncGenerator<SSEEvent> {
     const threadId = crypto.randomUUID();
 
     await delay(500);
