@@ -1,8 +1,26 @@
-import { useState, useCallback } from "react";
-import { researchStream, ResearchStream } from "@/lib/researchStream";
+import { useState, useCallback, useMemo } from "react";
+import {
+  APIResearchStream,
+  MockResearchStream,
+  ResearchStream,
+} from "@/lib/researchStream";
 import type { ResearchState, SSEEvent } from "@/lib/types";
 
-export function useResearch(stream: ResearchStream = researchStream) {
+interface UseResearchOptions {
+  stream?: ResearchStream;
+  token?: string | null;
+}
+
+export function useResearch(options: UseResearchOptions = {}) {
+  const stream = useMemo(() => {
+    if (options.stream) return options.stream;
+
+    const isTestMode = process.env.NEXT_PUBLIC_TEST_MODE !== "false";
+    if (isTestMode) return new MockResearchStream();
+
+    return new APIResearchStream(undefined, () => options.token || null);
+  }, [options.stream, options.token]);
+
   const [state, setState] = useState<ResearchState>({
     status: "idle",
     threadId: null,
@@ -11,9 +29,14 @@ export function useResearch(stream: ResearchStream = researchStream) {
     report: null,
     error: null,
   });
+  const [originalQuery, setOriginalQuery] = useState<string>("");
 
   const startResearch = useCallback(
     async (query: string, clarificationResponse?: string) => {
+      if (!clarificationResponse) {
+        setOriginalQuery(query);
+      }
+
       setState({
         status: "researching",
         threadId: null,
@@ -84,16 +107,16 @@ export function useResearch(stream: ResearchStream = researchStream) {
       report: null,
       error: null,
     });
+    setOriginalQuery("");
   }, []);
 
   const submitClarification = useCallback(
     async (response: string) => {
-      if (!state.clarification) return;
+      if (!state.clarification || !originalQuery) return;
 
-      const originalQuery = state.clarification.refined_query;
       await startResearch(originalQuery, response);
     },
-    [state.clarification, startResearch]
+    [state.clarification, originalQuery, startResearch]
   );
 
   return {
