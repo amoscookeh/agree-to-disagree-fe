@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { useResearch } from "@/hooks/useResearch";
 import { useAuth } from "@/context/AuthContext";
@@ -13,6 +13,7 @@ export default function Home() {
   const { user, token, isLoading, isQuotaExhausted } = useAuth();
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [pendingQuery, setPendingQuery] = useState("");
+  const hasProcessedQuery = useRef(false);
 
   const {
     status,
@@ -29,18 +30,25 @@ export default function Home() {
   const isComplete = status === "complete";
 
   useEffect(() => {
-    if (user && token && pendingQuery) {
+    if (user && token && pendingQuery && !hasProcessedQuery.current) {
+      hasProcessedQuery.current = true;
+      const query = pendingQuery;
+      
+      setTimeout(() => {
+        setPendingQuery("");
+      }, 0);
+      
       if (isQuotaExhausted) {
         router.push("/waitlist");
       } else {
-        startResearch(pendingQuery);
+        startResearch(query);
       }
-      setPendingQuery("");
     }
   }, [user, token, pendingQuery, isQuotaExhausted, router, startResearch]);
 
   const handleStartResearch = (query: string) => {
     if (!user) {
+      hasProcessedQuery.current = false;
       setPendingQuery(query);
       setShowAuthModal(true);
       return;
