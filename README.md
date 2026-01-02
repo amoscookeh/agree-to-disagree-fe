@@ -22,7 +22,7 @@ Open http://localhost:3000 and start researching.
 
 ## Installation
 
-**Requirements**: Node.js 18+
+**Requirements**: Node.js 20+
 
 ```bash
 npm install
