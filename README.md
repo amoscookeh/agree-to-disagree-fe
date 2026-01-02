@@ -50,6 +50,14 @@ npm run dev
 npm test
 ```
 
+**Run all CI checks locally**:
+
+```bash
+npm run ci
+```
+
+This runs formatting, linting, type checking, tests, and build—same as GitHub Actions.
+
 Default: runs with mock data. Backend must be running at `http://localhost:8000` for real mode.
 
 ## Features

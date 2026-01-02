@@ -7,28 +7,24 @@ import {
 
 describe("ResearchStream", () => {
   describe("MockResearchStream", () => {
-    it(
-      "should yield progress and report events",
-      async () => {
-        const mock = new MockResearchStream();
-        const events = [];
+    it("should yield progress and report events", async () => {
+      const mock = new MockResearchStream();
+      const events = [];
 
-        for await (const event of mock.stream("test query")) {
-          events.push(event);
-        }
+      for await (const event of mock.stream("test query")) {
+        events.push(event);
+      }
 
-        expect(events.length).toBeGreaterThan(0);
-        expect(events[0].type).toBe("progress");
-        expect(events[events.length - 1].type).toBe("done");
+      expect(events.length).toBeGreaterThan(0);
+      expect(events[0].type).toBe("progress");
+      expect(events[events.length - 1].type).toBe("done");
 
-        const reportEvent = events.find((e) => e.type === "report");
-        expect(reportEvent).toBeDefined();
-        if (reportEvent && reportEvent.type === "report") {
-          expect(reportEvent.data.summary).toContain("test query");
-        }
-      },
-      15000
-    );
+      const reportEvent = events.find((e) => e.type === "report");
+      expect(reportEvent).toBeDefined();
+      if (reportEvent && reportEvent.type === "report") {
+        expect(reportEvent.data.summary).toContain("test query");
+      }
+    }, 15000);
   });
 
   describe("APIResearchStream", () => {
@@ -37,7 +33,7 @@ describe("ResearchStream", () => {
     });
 
     it("should yield error event when fetch fails", async () => {
-      (global.fetch as any).mockRejectedValue(new Error("Network error"));
+      vi.mocked(global.fetch).mockRejectedValue(new Error("Network error"));
 
       const api = new APIResearchStream("http://localhost:8000");
       const events = [];
@@ -55,10 +51,10 @@ describe("ResearchStream", () => {
     });
 
     it("should yield error event when response is not ok", async () => {
-      (global.fetch as any).mockResolvedValue({
+      vi.mocked(global.fetch).mockResolvedValue({
         ok: false,
         status: 500,
-      });
+      } as Response);
 
       const api = new APIResearchStream("http://localhost:8000");
       const events = [];
@@ -82,4 +78,3 @@ describe("ResearchStream", () => {
     });
   });
 });
-

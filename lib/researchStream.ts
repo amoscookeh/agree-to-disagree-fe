@@ -330,7 +330,7 @@ export class APIResearchStream implements ResearchStream {
 
   async *stream(query: string): AsyncGenerator<SSEEvent> {
     let response: Response;
-    
+
     try {
       response = await fetch(`${this.apiUrl}/api/research`, {
         method: "POST",
@@ -345,7 +345,8 @@ export class APIResearchStream implements ResearchStream {
         type: "error",
         data: {
           code: "INTERNAL_ERROR",
-          message: "Cannot connect to backend. Make sure it's running or enable test mode.",
+          message:
+            "Cannot connect to backend. Make sure it's running or enable test mode.",
           details: error instanceof Error ? error.message : "Network error",
           recoverable: true,
         },
