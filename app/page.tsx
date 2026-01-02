@@ -33,11 +33,11 @@ export default function Home() {
     if (user && token && pendingQuery && !hasProcessedQuery.current) {
       hasProcessedQuery.current = true;
       const query = pendingQuery;
-      
+
       setTimeout(() => {
         setPendingQuery("");
       }, 0);
-      
+
       if (isQuotaExhausted) {
         router.push("/waitlist");
       } else {
