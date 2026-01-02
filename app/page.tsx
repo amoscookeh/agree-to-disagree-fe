@@ -5,7 +5,15 @@ import { ChatInput } from "@/components/Chat/ChatInput";
 import { ClarificationPrompt } from "@/components/Chat/ClarificationPrompt";
 
 export default function Home() {
-  const { status, clarification, progress, report, startResearch, submitClarification, reset } = useResearch();
+  const {
+    status,
+    clarification,
+    progress,
+    report,
+    startResearch,
+    submitClarification,
+    reset,
+  } = useResearch();
 
   const isResearching = status === "researching";
   const isClarifying = status === "clarifying";

@@ -8,11 +8,17 @@ import {
 } from "./types";
 
 export interface ResearchStream {
-  stream(query: string, clarificationResponse?: string): AsyncGenerator<SSEEvent>;
+  stream(
+    query: string,
+    clarificationResponse?: string
+  ): AsyncGenerator<SSEEvent>;
 }
 
 export class MockResearchStream implements ResearchStream {
-  async *stream(query: string, clarificationResponse?: string): AsyncGenerator<SSEEvent> {
+  async *stream(
+    query: string,
+    clarificationResponse?: string
+  ): AsyncGenerator<SSEEvent> {
     const threadId = crypto.randomUUID();
 
     await delay(500);
@@ -335,7 +341,10 @@ export class APIResearchStream implements ResearchStream {
       apiUrl || process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
   }
 
-  async *stream(query: string, clarificationResponse?: string): AsyncGenerator<SSEEvent> {
+  async *stream(
+    query: string,
+    clarificationResponse?: string
+  ): AsyncGenerator<SSEEvent> {
     let response: Response;
 
     try {
@@ -345,7 +354,7 @@ export class APIResearchStream implements ResearchStream {
           "Content-Type": "application/json",
           Accept: "text/event-stream",
         },
-        body: JSON.stringify({ 
+        body: JSON.stringify({
           query,
           clarification_response: clarificationResponse || null,
         }),
@@ -415,9 +424,7 @@ export class APIResearchStream implements ResearchStream {
     }
   }
 
-  private transformEvent(
-    raw: Record<string, unknown>
-  ): SSEEvent | null {
+  private transformEvent(raw: Record<string, unknown>): SSEEvent | null {
     const type = raw.type as string | undefined;
 
     // handle events with explicit type field
@@ -431,10 +438,12 @@ export class APIResearchStream implements ResearchStream {
             status: raw.status as AgentStatus,
             message: raw.message as string,
             tool_calls: [],
-            sources_searched: (raw.sources_searched as string[]) || (raw.sources as string[]) || [],
+            sources_searched:
+              (raw.sources_searched as string[]) ||
+              (raw.sources as string[]) ||
+              [],
             results_count: raw.results_count as number | undefined,
-            timestamp:
-              (raw.timestamp as string) || new Date().toISOString(),
+            timestamp: (raw.timestamp as string) || new Date().toISOString(),
           },
         };
 
@@ -500,14 +509,16 @@ export class APIResearchStream implements ResearchStream {
               status: raw.status as AgentStatus,
               message: raw.message as string,
               tool_calls: [],
-              sources_searched: (raw.sources_searched as string[]) || (raw.sources as string[]) || [],
+              sources_searched:
+                (raw.sources_searched as string[]) ||
+                (raw.sources as string[]) ||
+                [],
               results_count: raw.results_count as number | undefined,
-              timestamp:
-                (raw.timestamp as string) || new Date().toISOString(),
+              timestamp: (raw.timestamp as string) || new Date().toISOString(),
             },
           };
         }
-        
+
         console.log("Unknown event format:", raw);
         return null;
     }

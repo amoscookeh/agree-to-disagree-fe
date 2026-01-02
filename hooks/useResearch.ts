@@ -89,7 +89,7 @@ export function useResearch(stream: ResearchStream = researchStream) {
   const submitClarification = useCallback(
     async (response: string) => {
       if (!state.clarification) return;
-      
+
       const originalQuery = state.clarification.refined_query;
       await startResearch(originalQuery, response);
     },
