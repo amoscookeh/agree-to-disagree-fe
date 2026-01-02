@@ -13,7 +13,7 @@ export function useResearch(stream: ResearchStream = researchStream) {
   });
 
   const startResearch = useCallback(
-    async (query: string) => {
+    async (query: string, clarificationResponse?: string) => {
       setState({
         status: "researching",
         threadId: null,
@@ -23,7 +23,7 @@ export function useResearch(stream: ResearchStream = researchStream) {
         error: null,
       });
 
-      for await (const event of stream.stream(query)) {
+      for await (const event of stream.stream(query, clarificationResponse)) {
         handleEvent(event);
       }
     },
@@ -86,9 +86,20 @@ export function useResearch(stream: ResearchStream = researchStream) {
     });
   }, []);
 
+  const submitClarification = useCallback(
+    async (response: string) => {
+      if (!state.clarification) return;
+
+      const originalQuery = state.clarification.refined_query;
+      await startResearch(originalQuery, response);
+    },
+    [state.clarification, startResearch]
+  );
+
   return {
     ...state,
     startResearch,
+    submitClarification,
     reset,
   };
 }

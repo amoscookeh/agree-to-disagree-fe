@@ -1,7 +1,17 @@
-import { SSEEvent } from "./types";
+import {
+  SSEEvent,
+  AgentName,
+  AgentStatus,
+  ClaimData,
+  DisagreementItem,
+  Citation,
+} from "./types";
 
 export interface ResearchStream {
-  stream(query: string): AsyncGenerator<SSEEvent>;
+  stream(
+    query: string,
+    clarificationResponse?: string
+  ): AsyncGenerator<SSEEvent>;
 }
 
 export class MockResearchStream implements ResearchStream {
@@ -328,7 +338,10 @@ export class APIResearchStream implements ResearchStream {
       apiUrl || process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
   }
 
-  async *stream(query: string): AsyncGenerator<SSEEvent> {
+  async *stream(
+    query: string,
+    clarificationResponse?: string
+  ): AsyncGenerator<SSEEvent> {
     let response: Response;
 
     try {
@@ -338,7 +351,10 @@ export class APIResearchStream implements ResearchStream {
           "Content-Type": "application/json",
           Accept: "text/event-stream",
         },
-        body: JSON.stringify({ query }),
+        body: JSON.stringify({
+          query,
+          clarification_response: clarificationResponse || null,
+        }),
       });
     } catch (error) {
       yield {
@@ -394,10 +410,114 @@ export class APIResearchStream implements ResearchStream {
         if (line.startsWith("data: ")) {
           const jsonStr = line.slice(6);
           if (jsonStr.trim()) {
-            yield JSON.parse(jsonStr) as SSEEvent;
+            const raw = JSON.parse(jsonStr);
+            const transformed = this.transformEvent(raw);
+            if (transformed) {
+              yield transformed;
+            }
           }
         }
       }
+    }
+  }
+
+  private transformEvent(raw: Record<string, unknown>): SSEEvent | null {
+    const type = raw.type as string | undefined;
+
+    // handle events with explicit type field
+    switch (type) {
+      case "progress":
+        // progress events have: {type: "progress", agent, status, message, timestamp, ...}
+        return {
+          type: "progress",
+          data: {
+            agent: raw.agent as AgentName,
+            status: raw.status as AgentStatus,
+            message: raw.message as string,
+            tool_calls: [],
+            sources_searched:
+              (raw.sources_searched as string[]) ||
+              (raw.sources as string[]) ||
+              [],
+            results_count: raw.results_count as number | undefined,
+            timestamp: (raw.timestamp as string) || new Date().toISOString(),
+          },
+        };
+
+      case "clarification_needed":
+        return {
+          type: "clarification",
+          data: {
+            thread_id: "",
+            refined_query: raw.refined_query as string,
+            questions: raw.questions as string[],
+            suggestions: [],
+          },
+        };
+
+      case "report":
+        const reportData = raw.data as Record<string, unknown>;
+        return {
+          type: "report",
+          data: {
+            thread_id: "",
+            summary: reportData.summary as string,
+            claim_a: reportData.claim_a as ClaimData,
+            claim_b: reportData.claim_b as ClaimData,
+            agreements: reportData.agreements as string[],
+            disagreements: reportData.disagreements as DisagreementItem[],
+            uncertainties: reportData.uncertainties as string[],
+            citations: (raw.citations as Citation[]) || [],
+            metadata: {
+              sources_searched: 0,
+              total_results: 0,
+              citation_score: 0,
+              processing_time_ms: 0,
+            },
+          },
+        };
+
+      case "error":
+        return {
+          type: "error",
+          data: {
+            code: "RESEARCH_FAILED",
+            message: raw.message as string,
+            recoverable: true,
+          },
+        };
+
+      case "done":
+        return {
+          type: "done",
+          data: {
+            thread_id: "",
+            success: true,
+          },
+        };
+
+      default:
+        // fallback: if no type but has agent/status/message, treat as progress
+        if (raw.agent && raw.status && raw.message) {
+          return {
+            type: "progress",
+            data: {
+              agent: raw.agent as AgentName,
+              status: raw.status as AgentStatus,
+              message: raw.message as string,
+              tool_calls: [],
+              sources_searched:
+                (raw.sources_searched as string[]) ||
+                (raw.sources as string[]) ||
+                [],
+              results_count: raw.results_count as number | undefined,
+              timestamp: (raw.timestamp as string) || new Date().toISOString(),
+            },
+          };
+        }
+
+        console.log("Unknown event format:", raw);
+        return null;
     }
   }
 }

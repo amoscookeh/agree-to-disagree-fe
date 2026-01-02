@@ -2,11 +2,21 @@
 
 import { useResearch } from "@/hooks/useResearch";
 import { ChatInput } from "@/components/Chat/ChatInput";
+import { ClarificationPrompt } from "@/components/Chat/ClarificationPrompt";
 
 export default function Home() {
-  const { status, progress, report, startResearch, reset } = useResearch();
+  const {
+    status,
+    clarification,
+    progress,
+    report,
+    startResearch,
+    submitClarification,
+    reset,
+  } = useResearch();
 
   const isResearching = status === "researching";
+  const isClarifying = status === "clarifying";
   const isComplete = status === "complete";
 
   return (
@@ -22,6 +32,24 @@ export default function Home() {
                 What should we explore today?
               </p>
             </div>
+          </div>
+        )}
+
+        {isClarifying && clarification && (
+          <div className="flex-1 mb-8">
+            <div className="mb-8">
+              <button
+                onClick={reset}
+                className="text-teal-500 hover:text-teal-400 text-sm transition-colors"
+              >
+                ← Cancel
+              </button>
+            </div>
+            <ClarificationPrompt
+              data={clarification}
+              onSubmit={submitClarification}
+              onCancel={reset}
+            />
           </div>
         )}
 
@@ -189,8 +217,8 @@ export default function Home() {
 
         <div className="mt-auto pt-8">
           <ChatInput
-            onSubmit={startResearch}
-            disabled={isResearching}
+            onSubmit={(query) => startResearch(query)}
+            disabled={isResearching || isClarifying}
             placeholder="What should we explore today?"
           />
         </div>
