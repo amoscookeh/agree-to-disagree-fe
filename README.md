@@ -44,6 +44,12 @@ cp env.example .env.local
 npm run dev
 ```
 
+**Run tests**:
+
+```bash
+npm test
+```
+
 Default: runs with mock data. Backend must be running at `http://localhost:8000` for real mode.
 
 ## Features
