@@ -329,21 +329,55 @@ export class APIResearchStream implements ResearchStream {
   }
 
   async *stream(query: string): AsyncGenerator<SSEEvent> {
-    const response = await fetch(`${this.apiUrl}/api/research`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Accept: "text/event-stream",
-      },
-      body: JSON.stringify({ query }),
-    });
+    let response: Response;
+
+    try {
+      response = await fetch(`${this.apiUrl}/api/research`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "text/event-stream",
+        },
+        body: JSON.stringify({ query }),
+      });
+    } catch (error) {
+      yield {
+        type: "error",
+        data: {
+          code: "INTERNAL_ERROR",
+          message:
+            "Cannot connect to backend. Make sure it's running or enable test mode.",
+          details: error instanceof Error ? error.message : "Network error",
+          recoverable: true,
+        },
+      };
+      return;
+    }
 
     if (!response.ok) {
-      throw new Error(`Research request failed: ${response.status}`);
+      yield {
+        type: "error",
+        data: {
+          code: "RESEARCH_FAILED",
+          message: `Backend returned error: ${response.status}`,
+          recoverable: true,
+        },
+      };
+      return;
     }
 
     const reader = response.body?.getReader();
-    if (!reader) throw new Error("No response body");
+    if (!reader) {
+      yield {
+        type: "error",
+        data: {
+          code: "INTERNAL_ERROR",
+          message: "No response body from backend",
+          recoverable: false,
+        },
+      };
+      return;
+    }
 
     const decoder = new TextDecoder();
     let buffer = "";
@@ -372,7 +406,8 @@ function delay(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-const isTestMode = process.env.NEXT_PUBLIC_TEST_MODE === "true";
+// dep injection for research stream
+const isTestMode = process.env.NEXT_PUBLIC_TEST_MODE !== "false";
 export const researchStream: ResearchStream = isTestMode
   ? new MockResearchStream()
   : new APIResearchStream();

@@ -22,7 +22,7 @@ Open http://localhost:3000 and start researching.
 
 ## Installation
 
-**Requirements**: Node.js 18+
+**Requirements**: Node.js 20+
 
 ```bash
 npm install
@@ -43,6 +43,20 @@ cp env.example .env.local
 # Set NEXT_PUBLIC_TEST_MODE=false in .env.local
 npm run dev
 ```
+
+**Run tests**:
+
+```bash
+npm test
+```
+
+**Run all CI checks locally**:
+
+```bash
+npm run ci
+```
+
+This runs formatting, linting, type checking, tests, and build—same as GitHub Actions.
 
 Default: runs with mock data. Backend must be running at `http://localhost:8000` for real mode.
 
