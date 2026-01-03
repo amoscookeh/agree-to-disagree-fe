@@ -276,6 +276,8 @@ export default function ChatPage() {
   const [pendingFollowup, setPendingFollowup] =
     useState<PendingFollowup | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
+  const reportRef = useRef<HTMLDivElement>(null);
+  const hasScrolledToReport = useRef(false);
 
   // cleanup on unmount
   useEffect(() => {
@@ -291,6 +293,7 @@ export default function ChatPage() {
     try {
       const data = await fetchChat(token, id);
       setChat(data);
+      hasScrolledToReport.current = false;
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load chat");
     } finally {
@@ -440,10 +443,25 @@ export default function ChatPage() {
     return events;
   }, [chat, pendingFollowup]);
 
+  // scroll to report when chat loads
+  useEffect(() => {
+    if (chat?.report && reportRef.current && !hasScrolledToReport.current) {
+      hasScrolledToReport.current = true;
+      setTimeout(() => {
+        reportRef.current?.scrollIntoView({
+          behavior: "smooth",
+          block: "start",
+        });
+      }, 100);
+    }
+  }, [chat?.report]);
+
   if (loading || isLoading) {
     return (
       <div className="min-h-screen bg-[#0a0a0a] flex items-center justify-center">
-        <span className="loading loading-spinner loading-lg text-teal-500" />
+        <div className="flex flex-col items-center gap-4">
+          <p className="text-zinc-500 text-sm">Loading chat...</p>
+        </div>
       </div>
     );
   }
@@ -549,11 +567,12 @@ export default function ChatPage() {
 
               case "report":
                 return (
-                  <ReportMessage
-                    key={idx}
-                    report={chat.report!}
-                    timestamp={chat.query.created_at}
-                  />
+                  <div key={idx} ref={reportRef}>
+                    <ReportMessage
+                      report={chat.report!}
+                      timestamp={chat.query.created_at}
+                    />
+                  </div>
                 );
 
               case "followup":

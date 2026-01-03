@@ -41,9 +41,13 @@ export function ChatInput({
         <button
           type="submit"
           disabled={disabled || !input.trim()}
-          className="px-6 py-3 bg-teal-600 hover:bg-teal-500 disabled:bg-zinc-800 disabled:text-zinc-600 disabled:cursor-not-allowed text-white font-mono text-sm rounded-lg transition-colors"
+          className="px-6 py-3 bg-teal-600 hover:bg-teal-500 disabled:bg-zinc-800 disabled:text-zinc-600 disabled:cursor-not-allowed text-white font-mono text-sm rounded-lg transition-colors flex items-center justify-center"
         >
-          {disabled ? "..." : "→"}
+          {disabled ? (
+            <span className="loading loading-spinner loading-sm text-zinc-300"></span>
+          ) : (
+            "→"
+          )}
         </button>
       </div>
     </form>

@@ -43,10 +43,10 @@ export function ReportMessage({ report, timestamp }: ReportMessageProps) {
           className="border border-zinc-700 rounded-lg p-4 bg-zinc-800/50"
           aria-labelledby="claim-a-title"
         >
-          <div className="text-xs uppercase tracking-wider text-teal-500 mb-2">
+          <div className="text-xs uppercase tracking-wider text-blue-400 mb-2">
             {report.claim_a.stance}
           </div>
-          <h3 id="claim-a-title" className="text-xl font-bold mb-4">
+          <h3 id="claim-a-title" className="text-xl font-bold mb-4 text-white">
             {report.claim_a.title}
           </h3>
           <ul className="space-y-3" aria-label="Supporting evidence">
@@ -55,7 +55,7 @@ export function ReportMessage({ report, timestamp }: ReportMessageProps) {
                 <p className="text-zinc-300 mb-1">{ev.claim}</p>
                 <a
                   href={ev.url}
-                  className="text-teal-500 hover:text-teal-400 text-xs"
+                  className="text-blue-400 hover:text-blue-300 text-xs"
                   target="_blank"
                   rel="noopener noreferrer"
                 >
@@ -71,10 +71,10 @@ export function ReportMessage({ report, timestamp }: ReportMessageProps) {
           className="border border-zinc-700 rounded-lg p-4 bg-zinc-800/50"
           aria-labelledby="claim-b-title"
         >
-          <div className="text-xs uppercase tracking-wider text-amber-500 mb-2">
+          <div className="text-xs uppercase tracking-wider text-red-400 mb-2">
             {report.claim_b.stance}
           </div>
-          <h3 id="claim-b-title" className="text-xl font-bold mb-4">
+          <h3 id="claim-b-title" className="text-xl font-bold mb-4 text-white">
             {report.claim_b.title}
           </h3>
           <ul className="space-y-3" aria-label="Supporting evidence">
@@ -83,7 +83,7 @@ export function ReportMessage({ report, timestamp }: ReportMessageProps) {
                 <p className="text-zinc-300 mb-1">{ev.claim}</p>
                 <a
                   href={ev.url}
-                  className="text-amber-500 hover:text-amber-400 text-xs"
+                  className="text-red-400 hover:text-red-300 text-xs"
                   target="_blank"
                   rel="noopener noreferrer"
                 >
@@ -101,7 +101,10 @@ export function ReportMessage({ report, timestamp }: ReportMessageProps) {
           className="border border-zinc-700 rounded-lg p-4 bg-zinc-800/50"
           aria-labelledby="agreements-heading"
         >
-          <h3 id="agreements-heading" className="text-lg font-bold mb-3">
+          <h3
+            id="agreements-heading"
+            className="text-lg font-bold mb-3 text-teal-500"
+          >
             Areas of Agreement
           </h3>
           <ul className="space-y-2">
@@ -120,7 +123,10 @@ export function ReportMessage({ report, timestamp }: ReportMessageProps) {
           className="border border-zinc-700 rounded-lg p-4 bg-zinc-800/50"
           aria-labelledby="disagreements-heading"
         >
-          <h3 id="disagreements-heading" className="text-lg font-bold mb-3">
+          <h3
+            id="disagreements-heading"
+            className="text-lg font-bold mb-3 text-teal-500"
+          >
             Key Disagreements
           </h3>
           <div className="space-y-4">
@@ -131,11 +137,11 @@ export function ReportMessage({ report, timestamp }: ReportMessageProps) {
                 </h4>
                 <div className="grid md:grid-cols-2 gap-4 text-sm">
                   <div>
-                    <span className="text-zinc-500">Left: </span>
+                    <span className="text-blue-400">Left: </span>
                     <span className="text-zinc-300">{dis.left_position}</span>
                   </div>
                   <div>
-                    <span className="text-zinc-500">Right: </span>
+                    <span className="text-red-400">Right: </span>
                     <span className="text-zinc-300">{dis.right_position}</span>
                   </div>
                 </div>
@@ -151,7 +157,10 @@ export function ReportMessage({ report, timestamp }: ReportMessageProps) {
           className="border border-zinc-700 rounded-lg p-4 bg-zinc-800/50"
           aria-labelledby="uncertainties-heading"
         >
-          <h3 id="uncertainties-heading" className="text-lg font-bold mb-3">
+          <h3
+            id="uncertainties-heading"
+            className="text-lg font-bold mb-3 text-teal-500"
+          >
             Uncertainties
           </h3>
           <ul className="space-y-2">

@@ -26,6 +26,10 @@ import type {
   SupervisorDecisionData,
 } from "@/lib/types";
 
+function scrollToBottom(behavior: ScrollBehavior = "smooth") {
+  window.scrollTo({ top: document.body.scrollHeight, behavior });
+}
+
 type GroupedEvent =
   | { type: "user_query"; query: string; timestamp: string }
   | {
@@ -248,6 +252,13 @@ export default function Home() {
 
   const groupedEvents = useMemo(() => groupEvents(events), [events]);
 
+  // auto-scroll to bottom as new events come in
+  useEffect(() => {
+    if (isActive && events.length > 0) {
+      scrollToBottom();
+    }
+  }, [events.length, isActive]);
+
   return (
     <div className="min-h-screen bg-[#0a0a0a] text-zinc-100 relative">
       <AuthModal
@@ -285,7 +296,7 @@ export default function Home() {
 
           {isLoading && (
             <div className="flex-1 flex items-center justify-center">
-              <div className="loading loading-spinner loading-lg text-teal-500"></div>
+              <div className="loading loading-spinner loading-lg text-zinc-300"></div>
             </div>
           )}
 
@@ -304,6 +315,17 @@ export default function Home() {
 
           {!isLoading && isActive && (
             <div className="flex-1 mb-8">
+              {isComplete && (
+                <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+                  <div className="bg-zinc-900 border border-zinc-800 rounded-lg p-8 flex flex-col items-center gap-4">
+                    <div className="loading loading-spinner loading-lg text-zinc-300"></div>
+                    <p className="text-zinc-300 text-lg font-medium">
+                      Redirecting to report...
+                    </p>
+                  </div>
+                </div>
+              )}
+
               <div className="mb-8">
                 <button
                   onClick={handleReset}
