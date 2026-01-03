@@ -8,6 +8,7 @@ import type {
   Citation,
   ToolCall,
   IdeologicalLean,
+  FollowupCitation,
 } from "./types";
 
 export interface ResearchStream {
@@ -623,6 +624,32 @@ export class APIResearchStream implements ResearchStream {
             query_id:
               (doneData?.query_id as string) || (raw.query_id as string) || "",
             success: true,
+          },
+        };
+
+      case "followup_answer":
+        const followupData = raw.data as Record<string, unknown> | undefined;
+        const rawFollowupCitations =
+          (followupData?.citations as Record<string, unknown>[]) || [];
+
+        const followupCitations: FollowupCitation[] = rawFollowupCitations.map(
+          (c) => ({
+            source_name:
+              (c.source_name as string) || (c.source as string) || "Unknown",
+            title: (c.title as string) || "",
+            url: (c.url as string) || "",
+            snippet: (c.snippet as string) || "",
+            ideological_lean:
+              (c.ideological_lean as IdeologicalLean) || "neutral",
+          })
+        );
+
+        return {
+          type: "followup_answer",
+          data: {
+            answer: (followupData?.answer as string) || "",
+            citations: followupCitations,
+            thread_id: (followupData?.thread_id as string) || "",
           },
         };
 

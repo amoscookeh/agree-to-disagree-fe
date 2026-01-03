@@ -37,6 +37,8 @@ npm run ci         # all checks (lint, type, test, build)
 - Citation tracking for all claims
 - Query clarification flow
 - Persistent conversation threads at `/chat/[id]`
+- Research history sidebar
+- Follow-up questions on existing research
 
 ## Configuration
 
@@ -49,7 +51,7 @@ NEXT_PUBLIC_API_URL=http://localhost:8000
 ## Architecture
 
 - **Hooks:** `useResearchThread` manages SSE events via reducer pattern
-- **Components:** `Thread/` for message display, `Chat/` for input
+- **Components:** `Thread/` for message display, `Chat/` for input, `Sidebar/` for history
 - **Streaming:** `ResearchStream` interface with proper cleanup
 - **Type safety:** TypeScript strict mode throughout
 

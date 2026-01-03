@@ -11,7 +11,9 @@ import { UserMessage } from "@/components/Thread/UserMessage";
 import { AgentUpdate } from "@/components/Thread/AgentUpdate";
 import { ClarificationMessage } from "@/components/Thread/ClarificationMessage";
 import { ReportMessage } from "@/components/Thread/ReportMessage";
-import type { ProgressData, ReportData } from "@/lib/types";
+import { ChatHistory } from "@/components/Sidebar/HistorySidebar";
+import type { ProgressData, ReportData, FollowupAnswerData } from "@/lib/types";
+import { FollowupMessage } from "@/components/Thread/FollowupMessage";
 
 function ProgressLogGroup({
   events,
@@ -75,7 +77,8 @@ type GroupedEvent =
       timestamp: string;
     }
   | { type: "user_response"; response: string; timestamp: string }
-  | { type: "report"; data: ReportData; timestamp: string };
+  | { type: "report"; data: ReportData; timestamp: string }
+  | { type: "followup_answer"; data: FollowupAnswerData; timestamp: string };
 
 function groupEvents(events: ThreadEvent[]): GroupedEvent[] {
   const grouped: GroupedEvent[] = [];
@@ -105,7 +108,9 @@ function groupEvents(events: ThreadEvent[]): GroupedEvent[] {
         break;
 
       case "progress":
-        currentProgressGroup.push(event.data);
+        if (event.data.agent !== "classification") {
+          currentProgressGroup.push(event.data);
+        }
         break;
 
       case "clarification":
@@ -134,6 +139,15 @@ function groupEvents(events: ThreadEvent[]): GroupedEvent[] {
           timestamp: new Date().toISOString(),
         });
         break;
+
+      case "followup_answer":
+        flushProgressGroup();
+        grouped.push({
+          type: "followup_answer",
+          data: event.data,
+          timestamp: new Date().toISOString(),
+        });
+        break;
     }
   });
 
@@ -146,6 +160,7 @@ export default function Home() {
   const { user, token, isLoading, isQuotaExhausted } = useAuth();
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [pendingQuery, setPendingQuery] = useState("");
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   const hasProcessedQuery = useRef(false);
 
   const { status, events, error, startResearch, submitClarification, reset } =
@@ -214,146 +229,168 @@ export default function Home() {
         onSuccess={() => setShowAuthModal(false)}
       />
 
-      <div className="relative z-10 flex flex-col min-h-screen max-w-4xl mx-auto px-6 py-12">
-        {!isLoading && (
-          <div className="absolute top-6 right-6">
-            {user ? (
-              <UserBadge />
-            ) : (
-              <button
-                onClick={() => setShowAuthModal(true)}
-                className="bg-teal-600 hover:bg-teal-500 text-white px-4 py-2 rounded font-medium text-sm"
-              >
-                Sign In
-              </button>
-            )}
-          </div>
-        )}
+      <ChatHistory
+        isOpen={sidebarOpen && !!user}
+        onToggle={() => setSidebarOpen(!sidebarOpen)}
+      />
 
-        {status === "idle" && (
-          <div className="flex-1 flex flex-col items-center justify-center">
-            <div className="text-center mb-16">
-              <h1 className="text-6xl font-bold mb-4 tracking-tight">
-                Agree <span className="text-teal-500">2</span> Disagree
-              </h1>
-              <p className="text-zinc-500 text-lg">
-                What should we explore today?
-              </p>
+      <div
+        className={`
+          relative z-10 flex flex-col min-h-screen transition-all duration-300
+          ${sidebarOpen && user ? "ml-72" : "ml-0"}
+        `}
+      >
+        <div className="flex flex-col min-h-screen max-w-4xl mx-auto px-6 py-12 w-full">
+          {!isLoading && (
+            <div className="absolute top-6 right-6">
+              {user ? (
+                <UserBadge />
+              ) : (
+                <button
+                  onClick={() => setShowAuthModal(true)}
+                  className="bg-teal-600 hover:bg-teal-500 text-white px-4 py-2 rounded font-medium text-sm"
+                >
+                  Sign In
+                </button>
+              )}
             </div>
-          </div>
-        )}
+          )}
 
-        {isActive && (
-          <div className="flex-1 mb-8">
-            <div className="mb-8">
-              <button
-                onClick={handleReset}
-                className="text-teal-500 hover:text-teal-400 text-sm transition-colors"
-              >
-                ← New research
-              </button>
-            </div>
-
-            <div className="space-y-4">
-              {groupedEvents.map((event, idx) => {
-                switch (event.type) {
-                  case "user_query":
-                    return (
-                      <UserMessage
-                        key={idx}
-                        query={event.query}
-                        timestamp={event.timestamp}
-                      />
-                    );
-
-                  case "progress_group":
-                    return (
-                      <ProgressLogGroup
-                        key={idx}
-                        events={event.events}
-                        title={
-                          event.afterClarification
-                            ? "Continued Research Progress"
-                            : "Research Progress Log"
-                        }
-                        defaultOpen={true}
-                      />
-                    );
-
-                  case "clarification":
-                    return (
-                      <ClarificationMessage
-                        key={idx}
-                        question={event.data.refined_query}
-                        questions={event.data.questions}
-                        suggestions={event.data.suggestions}
-                        timestamp={event.timestamp}
-                      />
-                    );
-
-                  case "user_response":
-                    return (
-                      <UserMessage
-                        key={idx}
-                        query={event.response}
-                        timestamp={event.timestamp}
-                        isResponse
-                      />
-                    );
-
-                  case "report":
-                    return (
-                      <ReportMessage
-                        key={idx}
-                        report={event.data}
-                        timestamp={event.timestamp}
-                      />
-                    );
-
-                  default:
-                    return null;
-                }
-              })}
-            </div>
-
-            {isError && error && (
-              <div className="border border-red-800 rounded-lg p-6 bg-red-950/30 mt-4 mr-8">
-                <h3 className="text-lg font-semibold mb-3 text-red-400">
-                  {error.code === "RATE_LIMITED"
-                    ? "Research Quota Exhausted"
-                    : "Research Error"}
-                </h3>
-                <p className="text-zinc-400 text-sm mb-4">{error.message}</p>
-                {error.code === "RATE_LIMITED" && (
-                  <p className="text-zinc-500 text-xs">
-                    Redirecting to waitlist...
-                  </p>
-                )}
-                {error.recoverable && error.code !== "RATE_LIMITED" && (
-                  <button
-                    onClick={handleReset}
-                    className="text-teal-500 hover:text-teal-400 text-sm"
-                  >
-                    Try again
-                  </button>
-                )}
+          {status === "idle" && (
+            <div className="flex-1 flex flex-col items-center justify-center">
+              <div className="text-center mb-16">
+                <h1 className="text-6xl font-bold mb-4 tracking-tight">
+                  Agree <span className="text-teal-500">2</span> Disagree
+                </h1>
+                <p className="text-zinc-500 text-lg">
+                  What should we explore today?
+                </p>
               </div>
-            )}
-          </div>
-        )}
+            </div>
+          )}
 
-        <div className="mt-auto pt-8">
-          <ChatInput
-            onSubmit={
-              isClarifying ? handleClarificationSubmit : handleStartResearch
-            }
-            disabled={isResearching}
-            placeholder={
-              isClarifying
-                ? "Provide more details about what you're looking for..."
-                : "What should we explore today?"
-            }
-          />
+          {isActive && (
+            <div className="flex-1 mb-8">
+              <div className="mb-8">
+                <button
+                  onClick={handleReset}
+                  className="text-teal-500 hover:text-teal-400 text-sm transition-colors"
+                >
+                  ← New research
+                </button>
+              </div>
+
+              <div className="space-y-4">
+                {groupedEvents.map((event, idx) => {
+                  switch (event.type) {
+                    case "user_query":
+                      return (
+                        <UserMessage
+                          key={idx}
+                          query={event.query}
+                          timestamp={event.timestamp}
+                        />
+                      );
+
+                    case "progress_group":
+                      return (
+                        <ProgressLogGroup
+                          key={idx}
+                          events={event.events}
+                          title={
+                            event.afterClarification
+                              ? "Continued Research Progress"
+                              : "Research Progress Log"
+                          }
+                          defaultOpen={true}
+                        />
+                      );
+
+                    case "clarification":
+                      return (
+                        <ClarificationMessage
+                          key={idx}
+                          question={event.data.refined_query}
+                          questions={event.data.questions}
+                          suggestions={event.data.suggestions}
+                          timestamp={event.timestamp}
+                        />
+                      );
+
+                    case "user_response":
+                      return (
+                        <UserMessage
+                          key={idx}
+                          query={event.response}
+                          timestamp={event.timestamp}
+                          isResponse
+                        />
+                      );
+
+                    case "report":
+                      return (
+                        <ReportMessage
+                          key={idx}
+                          report={event.data}
+                          timestamp={event.timestamp}
+                        />
+                      );
+
+                    case "followup_answer":
+                      return (
+                        <FollowupMessage
+                          key={idx}
+                          answer={event.data.answer}
+                          citations={event.data.citations}
+                          timestamp={event.timestamp}
+                        />
+                      );
+
+                    default:
+                      return null;
+                  }
+                })}
+              </div>
+
+              {isError && error && (
+                <div className="border border-red-800 rounded-lg p-6 bg-red-950/30 mt-4 mr-8">
+                  <h3 className="text-lg font-semibold mb-3 text-red-400">
+                    {error.code === "RATE_LIMITED"
+                      ? "Research Quota Exhausted"
+                      : "Research Error"}
+                  </h3>
+                  <p className="text-zinc-400 text-sm mb-4">{error.message}</p>
+                  {error.code === "RATE_LIMITED" && (
+                    <p className="text-zinc-500 text-xs">
+                      Redirecting to waitlist...
+                    </p>
+                  )}
+                  {error.recoverable && error.code !== "RATE_LIMITED" && (
+                    <button
+                      onClick={handleReset}
+                      className="text-teal-500 hover:text-teal-400 text-sm"
+                    >
+                      Try again
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
+          <div className="mt-auto pt-8">
+            <ChatInput
+              onSubmit={
+                isClarifying ? handleClarificationSubmit : handleStartResearch
+              }
+              disabled={isResearching}
+              placeholder={
+                isClarifying
+                  ? "Provide more details about what you're looking for..."
+                  : "What should we explore today?"
+              }
+            />
+          </div>
         </div>
       </div>
     </div>
