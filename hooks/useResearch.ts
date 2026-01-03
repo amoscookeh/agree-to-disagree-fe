@@ -1,9 +1,5 @@
 import { useState, useCallback, useMemo } from "react";
-import {
-  APIResearchStream,
-  MockResearchStream,
-  ResearchStream,
-} from "@/lib/researchStream";
+import { APIResearchStream, ResearchStream } from "@/lib/researchStream";
 import type { ResearchState, SSEEvent } from "@/lib/types";
 
 interface UseResearchOptions {
@@ -14,16 +10,13 @@ interface UseResearchOptions {
 export function useResearch(options: UseResearchOptions = {}) {
   const stream = useMemo(() => {
     if (options.stream) return options.stream;
-
-    const isTestMode = process.env.NEXT_PUBLIC_TEST_MODE !== "false";
-    if (isTestMode) return new MockResearchStream();
-
     return new APIResearchStream(undefined, () => options.token || null);
   }, [options.stream, options.token]);
 
   const [state, setState] = useState<ResearchState>({
     status: "idle",
     threadId: null,
+    queryId: null,
     clarification: null,
     progress: [],
     report: null,
@@ -40,6 +33,7 @@ export function useResearch(options: UseResearchOptions = {}) {
       setState({
         status: "researching",
         threadId: null,
+        queryId: null,
         clarification: null,
         progress: [],
         report: null,
@@ -55,6 +49,14 @@ export function useResearch(options: UseResearchOptions = {}) {
 
   const handleEvent = (event: SSEEvent) => {
     switch (event.type) {
+      case "thread":
+        setState((prev) => ({
+          ...prev,
+          threadId: event.data.thread_id,
+          queryId: event.data.query_id,
+        }));
+        break;
+
       case "clarification":
         setState((prev) => ({
           ...prev,
@@ -93,6 +95,7 @@ export function useResearch(options: UseResearchOptions = {}) {
         setState((prev) => ({
           ...prev,
           threadId: event.data.thread_id,
+          queryId: event.data.query_id,
         }));
         break;
     }
@@ -102,6 +105,7 @@ export function useResearch(options: UseResearchOptions = {}) {
     setState({
       status: "idle",
       threadId: null,
+      queryId: null,
       clarification: null,
       progress: [],
       report: null,

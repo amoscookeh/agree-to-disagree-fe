@@ -16,6 +16,7 @@ export type AgentStatus =
   | "error";
 
 export type SSEEventType =
+  | "thread"
   | "clarification"
   | "progress"
   | "report"
@@ -65,6 +66,28 @@ export interface ToolCall {
   output_preview?: string;
 }
 
+export interface ProgressDetails {
+  source?: string;
+  query_sent?: string;
+  lean?: string;
+  result_count?: number;
+  sample_titles?: string[];
+  original_query?: string;
+  refined_query?: string;
+  needs_clarification?: boolean;
+  analysis?: string;
+  left_sources?: number;
+  right_sources?: number;
+  academic_sources?: number;
+  total_count?: number;
+  citation_count?: number;
+  agreements_found?: number;
+  disagreements_found?: number;
+  uncertainties_noted?: number;
+  error?: string;
+  [key: string]: unknown;
+}
+
 export interface ProgressData {
   agent: AgentName;
   status: AgentStatus;
@@ -73,6 +96,7 @@ export interface ProgressData {
   sources_searched: string[];
   results_count?: number;
   timestamp: string;
+  details?: ProgressDetails;
 }
 
 export interface EvidenceItem {
@@ -121,7 +145,7 @@ export interface ReportData {
   disagreements: DisagreementItem[];
   uncertainties: string[];
   citations: Citation[];
-  metadata: ReportMetadata;
+  metadata?: ReportMetadata;
 }
 
 export interface ErrorData {
@@ -134,7 +158,18 @@ export interface ErrorData {
 
 export interface DoneData {
   thread_id: string;
+  query_id: string;
   success: boolean;
+}
+
+export interface ThreadData {
+  thread_id: string;
+  query_id: string;
+}
+
+export interface SSEThreadEvent {
+  type: "thread";
+  data: ThreadData;
 }
 
 export interface SSEClarificationEvent {
@@ -163,6 +198,7 @@ export interface SSEDoneEvent {
 }
 
 export type SSEEvent =
+  | SSEThreadEvent
   | SSEClarificationEvent
   | SSEProgressEvent
   | SSEReportEvent
@@ -172,6 +208,7 @@ export type SSEEvent =
 export interface ResearchState {
   status: "idle" | "clarifying" | "researching" | "complete" | "error";
   threadId: string | null;
+  queryId: string | null;
   clarification: ClarificationData | null;
   progress: ProgressData[];
   report: ReportData | null;
@@ -183,4 +220,37 @@ export interface DataSourceInfo {
   lean: IdeologicalLean;
   enabled: boolean;
   status: "healthy" | "degraded" | "unavailable";
+}
+
+export interface Message {
+  id: string;
+  query_id: string;
+  role: "user" | "agent" | "clarification" | "report";
+  content: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface QueryInfo {
+  id: string;
+  user_id: string;
+  thread_id: string;
+  query_text: string;
+  title: string;
+  is_completed: boolean;
+  created_at: string;
+}
+
+export interface ChatThread {
+  query_id: string;
+  thread_id: string;
+  query: QueryInfo;
+  report: ReportData | null;
+  messages: Message[];
+  state: Record<string, unknown>;
+  history: Array<{
+    values: Record<string, unknown>;
+    next: string[];
+    metadata: Record<string, unknown>;
+    created_at: string;
+  }>;
 }
