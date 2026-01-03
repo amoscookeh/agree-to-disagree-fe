@@ -120,44 +120,41 @@ export function ChatHistory({ isOpen, onToggle }: ChatHistoryProps) {
             <div className="flex justify-center p-4">
               <span className="loading loading-spinner loading-sm text-teal-500" />
             </div>
-          ) : threads.length === 0 ? (
+          ) : threads.filter((t) => t.is_completed).length === 0 ? (
             <p className="p-4 text-center text-zinc-500 text-sm">
               No research history yet
             </p>
           ) : (
             <div className="py-2">
-              {threads.map((thread) => (
-                <div key={thread.id} className="relative group">
-                  <button
-                    onClick={() => router.push(`/chat/${thread.id}`)}
-                    className={`
+              {threads
+                .filter((thread) => thread.is_completed)
+                .map((thread) => (
+                  <div key={thread.id} className="relative group">
+                    <button
+                      onClick={() => router.push(`/chat/${thread.id}`)}
+                      className={`
                       w-full px-4 py-3 text-left hover:bg-zinc-800/50 transition-colors pr-10
                       ${currentThreadId === thread.id ? "bg-zinc-800 border-l-2 border-teal-500" : ""}
                     `}
-                  >
-                    <div className="flex items-start justify-between gap-2">
-                      <span className="text-sm text-zinc-300 line-clamp-2 flex-1">
-                        {thread.title || thread.query_text || "Untitled"}
-                      </span>
-                      <span className="text-xs text-zinc-600 shrink-0">
-                        {formatDate(thread.created_at)}
-                      </span>
-                    </div>
-                    {!thread.is_completed && (
-                      <span className="text-xs text-amber-500 mt-1 inline-block">
-                        In Progress
-                      </span>
-                    )}
-                  </button>
-                  <button
-                    onClick={(e) => handleDelete(e, thread.id)}
-                    className="absolute right-2 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 p-1.5 hover:bg-red-500/20 rounded transition-all"
-                    title="Delete"
-                  >
-                    <TrashIcon />
-                  </button>
-                </div>
-              ))}
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <span className="text-sm text-zinc-300 line-clamp-2 flex-1">
+                          {thread.title || thread.query_text || "Untitled"}
+                        </span>
+                        <span className="text-xs text-zinc-600 shrink-0">
+                          {formatDate(thread.created_at)}
+                        </span>
+                      </div>
+                    </button>
+                    <button
+                      onClick={(e) => handleDelete(e, thread.id)}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 p-1.5 hover:bg-red-500/20 rounded transition-all"
+                      title="Delete"
+                    >
+                      <TrashIcon />
+                    </button>
+                  </div>
+                ))}
 
               {hasMore && !loading && (
                 <button

@@ -123,9 +123,30 @@ export function ReportMessage({ report, timestamp }: ReportMessageProps) {
 
       {report.metadata && (
         <div className="text-xs text-zinc-500 pt-2 border-t border-zinc-700">
-          {report.metadata.sources_searched} sources •{" "}
-          {report.metadata.total_results} results •{" "}
-          {(report.metadata.processing_time_ms / 1000).toFixed(1)}s
+          {report.metadata.cycles_used !== undefined && (
+            <span>
+              {report.metadata.cycles_used} research cycle
+              {report.metadata.cycles_used !== 1 ? "s" : ""}
+            </span>
+          )}
+          {report.metadata.drafts_synthesized !== undefined && (
+            <span>
+              {" "}
+              • {report.metadata.drafts_synthesized} draft
+              {report.metadata.drafts_synthesized !== 1 ? "s" : ""} synthesized
+            </span>
+          )}
+          {report.metadata.sources_searched !== undefined &&
+            report.metadata.sources_searched > 0 && (
+              <span> • {report.metadata.sources_searched} sources</span>
+            )}
+          {report.metadata.processing_time_ms !== undefined &&
+            report.metadata.processing_time_ms > 0 && (
+              <span>
+                {" "}
+                • {(report.metadata.processing_time_ms / 1000).toFixed(1)}s
+              </span>
+            )}
         </div>
       )}
     </div>

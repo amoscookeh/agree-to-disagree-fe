@@ -9,12 +9,14 @@ import type {
   ToolCall,
   IdeologicalLean,
   FollowupCitation,
+  SubQueryAngle,
 } from "./types";
 
 export interface ResearchStream {
   stream(
     query: string,
-    clarificationResponse?: string
+    clarificationResponse?: string,
+    threadId?: string
   ): AsyncGenerator<SSEEvent>;
 }
 
@@ -356,7 +358,8 @@ export class APIResearchStream implements ResearchStream {
 
   async *stream(
     query: string,
-    clarificationResponse?: string
+    clarificationResponse?: string,
+    threadId?: string
   ): AsyncGenerator<SSEEvent> {
     const headers: Record<string, string> = {
       "Content-Type": "application/json",
@@ -375,6 +378,7 @@ export class APIResearchStream implements ResearchStream {
         headers,
         body: JSON.stringify({
           query,
+          thread_id: threadId || null,
           clarification_response: clarificationResponse || null,
         }),
       });
@@ -650,6 +654,58 @@ export class APIResearchStream implements ResearchStream {
             answer: (followupData?.answer as string) || "",
             citations: followupCitations,
             thread_id: (followupData?.thread_id as string) || "",
+          },
+        };
+
+      case "sub_queries":
+        const subQueriesData = raw.data as Record<string, unknown>;
+        const rawSubQueries =
+          (subQueriesData.sub_queries as Record<string, unknown>[]) || [];
+
+        return {
+          type: "sub_queries",
+          data: {
+            thread_id: (subQueriesData.thread_id as string) || "",
+            cycle: (subQueriesData.cycle as number) || 1,
+            sub_queries: rawSubQueries.map((sq) => ({
+              id: (sq.id as string) || "",
+              query: (sq.query as string) || "",
+              angle: (sq.angle as SubQueryAngle) || "both",
+            })),
+          },
+        };
+
+      case "draft":
+        const draftData = raw.data as Record<string, unknown>;
+        return {
+          type: "draft",
+          data: {
+            thread_id: (draftData.thread_id as string) || "",
+            sub_query_id: (draftData.sub_query_id as string) || "",
+            sub_query: (draftData.sub_query as string) || "",
+            angle: (draftData.angle as SubQueryAngle) || "both",
+            summary: (draftData.summary as string) || "",
+            key_findings: (draftData.key_findings as string[]) || [],
+            sources_count: (draftData.sources_count as number) || 0,
+            cycle: (draftData.cycle as number) || 1,
+          },
+        };
+
+      case "supervisor_decision":
+        const decisionData = raw.data as Record<string, unknown>;
+        return {
+          type: "supervisor_decision",
+          data: {
+            thread_id: (decisionData.thread_id as string) || "",
+            cycle: (decisionData.cycle as number) || 1,
+            decision:
+              (decisionData.decision as "continue" | "synthesize") ||
+              "continue",
+            reasoning: (decisionData.reasoning as string) || "",
+            drafts_collected: (decisionData.drafts_collected as number) || 0,
+            new_sub_queries_count: decisionData.new_sub_queries_count as
+              | number
+              | undefined,
           },
         };
 

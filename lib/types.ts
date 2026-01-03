@@ -3,6 +3,8 @@ export type IdeologicalLean = "left" | "right" | "neutral";
 export type AgentName =
   | "classification"
   | "clarification"
+  | "supervisor"
+  | "sub_research"
   | "left_research"
   | "right_research"
   | "academic_research"
@@ -14,6 +16,10 @@ export type AgentStatus =
   | "starting"
   | "searching"
   | "analyzing"
+  | "reviewing"
+  | "generating"
+  | "synthesizing"
+  | "processing"
   | "complete"
   | "error";
 
@@ -21,6 +27,9 @@ export type SSEEventType =
   | "thread"
   | "clarification"
   | "progress"
+  | "sub_queries"
+  | "draft"
+  | "supervisor_decision"
   | "report"
   | "followup_answer"
   | "error"
@@ -137,6 +146,8 @@ export interface ReportMetadata {
   total_results: number;
   citation_score: number;
   processing_time_ms: number;
+  cycles_used?: number;
+  drafts_synthesized?: number;
 }
 
 export interface ReportData {
@@ -200,10 +211,62 @@ export interface SSEDoneEvent {
   data: DoneData;
 }
 
+export type SubQueryAngle = "left" | "right" | "both";
+
+export interface SubQuery {
+  id: string;
+  query: string;
+  angle: SubQueryAngle;
+}
+
+export interface SubQueriesData {
+  thread_id: string;
+  cycle: number;
+  sub_queries: SubQuery[];
+}
+
+export interface DraftData {
+  thread_id: string;
+  sub_query_id: string;
+  sub_query: string;
+  angle: SubQueryAngle;
+  summary: string;
+  key_findings: string[];
+  sources_count: number;
+  cycle: number;
+}
+
+export interface SupervisorDecisionData {
+  thread_id: string;
+  cycle: number;
+  decision: "continue" | "synthesize";
+  reasoning: string;
+  drafts_collected: number;
+  new_sub_queries_count?: number;
+}
+
+export interface SSESubQueriesEvent {
+  type: "sub_queries";
+  data: SubQueriesData;
+}
+
+export interface SSEDraftEvent {
+  type: "draft";
+  data: DraftData;
+}
+
+export interface SSESupervisorDecisionEvent {
+  type: "supervisor_decision";
+  data: SupervisorDecisionData;
+}
+
 export type SSEEvent =
   | SSEThreadEvent
   | SSEClarificationEvent
   | SSEProgressEvent
+  | SSESubQueriesEvent
+  | SSEDraftEvent
+  | SSESupervisorDecisionEvent
   | SSEReportEvent
   | SSEFollowupAnswerEvent
   | SSEErrorEvent
@@ -215,6 +278,10 @@ export interface ResearchState {
   queryId: string | null;
   clarification: ClarificationData | null;
   progress: ProgressData[];
+  subQueries: SubQuery[];
+  drafts: DraftData[];
+  currentCycle: number;
+  supervisorDecisions: SupervisorDecisionData[];
   report: ReportData | null;
   error: ErrorData | null;
 }
@@ -229,7 +296,16 @@ export interface DataSourceInfo {
 export interface Message {
   id: string;
   query_id: string;
-  role: "user" | "agent" | "clarification" | "report" | "followup" | "error";
+  role:
+    | "user"
+    | "agent"
+    | "clarification"
+    | "report"
+    | "followup"
+    | "error"
+    | "sub_queries"
+    | "draft"
+    | "supervisor_decision";
   content: Record<string, unknown>;
   created_at: string;
 }

@@ -12,8 +12,18 @@ import { AgentUpdate } from "@/components/Thread/AgentUpdate";
 import { ClarificationMessage } from "@/components/Thread/ClarificationMessage";
 import { ReportMessage } from "@/components/Thread/ReportMessage";
 import { ChatHistory } from "@/components/Sidebar/HistorySidebar";
-import type { ProgressData, ReportData, FollowupAnswerData } from "@/lib/types";
+import type {
+  ProgressData,
+  ReportData,
+  FollowupAnswerData,
+  SubQueriesData,
+  DraftData,
+  SupervisorDecisionData,
+} from "@/lib/types";
 import { FollowupMessage } from "@/components/Thread/FollowupMessage";
+import { SubQueriesMessage } from "@/components/Thread/SubQueriesMessage";
+import { DraftMessage } from "@/components/Thread/DraftMessage";
+import { SupervisorDecisionMessage } from "@/components/Thread/SupervisorDecisionMessage";
 
 function ProgressLogGroup({
   events,
@@ -51,6 +61,7 @@ function ProgressLogGroup({
               status={p.status}
               message={p.message}
               details={p.details}
+              toolCalls={p.tool_calls}
               timestamp={p.timestamp}
             />
           ))}
@@ -77,6 +88,9 @@ type GroupedEvent =
       timestamp: string;
     }
   | { type: "user_response"; response: string; timestamp: string }
+  | { type: "sub_queries"; data: SubQueriesData }
+  | { type: "draft"; data: DraftData }
+  | { type: "supervisor_decision"; data: SupervisorDecisionData }
   | { type: "report"; data: ReportData; timestamp: string }
   | { type: "followup_answer"; data: FollowupAnswerData; timestamp: string };
 
@@ -131,6 +145,19 @@ function groupEvents(events: ThreadEvent[]): GroupedEvent[] {
         });
         break;
 
+      case "sub_queries":
+        flushProgressGroup();
+        grouped.push({ type: "sub_queries", data: event.data });
+        break;
+
+      case "draft":
+        grouped.push({ type: "draft", data: event.data });
+        break;
+
+      case "supervisor_decision":
+        grouped.push({ type: "supervisor_decision", data: event.data });
+        break;
+
       case "report":
         flushProgressGroup();
         grouped.push({
@@ -163,14 +190,41 @@ export default function Home() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const hasProcessedQuery = useRef(false);
 
-  const { status, events, error, startResearch, submitClarification, reset } =
-    useResearchThread({ token });
+  const {
+    status,
+    events,
+    error,
+    queryId,
+    startResearch,
+    submitClarification,
+    reset,
+  } = useResearchThread({ token });
 
   const isResearching = status === "researching";
   const isClarifying = status === "clarifying";
   const isComplete = status === "complete";
   const isError = status === "error";
   const isActive = isClarifying || isResearching || isComplete || isError;
+
+  // redirect to chat page when research completes
+  useEffect(() => {
+    if (isComplete && queryId) {
+      router.push(`/chat/${queryId}`);
+    }
+  }, [isComplete, queryId, router]);
+
+  // warn user before leaving during active research
+  useEffect(() => {
+    if (!isResearching) return;
+
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      return "";
+    };
+
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    return () => window.removeEventListener("beforeunload", handleBeforeUnload);
+  }, [isResearching]);
 
   // redirect to waitlist if quota exhausted
   useEffect(() => {
@@ -324,6 +378,20 @@ export default function Home() {
                           query={event.response}
                           timestamp={event.timestamp}
                           isResponse
+                        />
+                      );
+
+                    case "sub_queries":
+                      return <SubQueriesMessage key={idx} data={event.data} />;
+
+                    case "draft":
+                      return <DraftMessage key={idx} data={event.data} />;
+
+                    case "supervisor_decision":
+                      return (
+                        <SupervisorDecisionMessage
+                          key={idx}
+                          data={event.data}
                         />
                       );
 
