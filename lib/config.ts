@@ -1,20 +1,8 @@
-// direct access to env var
-const API_URL = process.env.NEXT_PUBLIC_API_URL;
+// static access required for Next.js client-side env vars
+// process.env[key] doesn't work - must use literal property access
+const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
-// debug logging
-console.log('[DEBUG] Direct access - NEXT_PUBLIC_API_URL:', API_URL);
-console.log('[DEBUG] Type:', typeof API_URL);
-console.log('[DEBUG] All env keys:', Object.keys(process.env));
-console.log('[DEBUG] All NEXT_PUBLIC vars:', Object.keys(process.env).filter(k => k.startsWith('NEXT_PUBLIC')));
-
-// use fallback if not set
-const apiUrl = API_URL || "http://localhost:8000";
-
-if (!API_URL) {
-  console.warn('⚠️ NEXT_PUBLIC_API_URL not set, using fallback:', apiUrl);
-} else {
-  console.log('✅ Using NEXT_PUBLIC_API_URL:', apiUrl);
-}
+console.log('[Config] API URL:', apiUrl);
 
 export const config = {
   apiUrl,
