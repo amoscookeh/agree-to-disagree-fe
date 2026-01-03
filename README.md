@@ -13,64 +13,47 @@ Open http://localhost:3000, enter "What are perspectives on climate policy?" and
 
 ## Installation
 
-**Requirements:** Node.js 20+
+**Requirements:** Node.js 20+, backend running at localhost:8000
 
 ```bash
 npm install
+cp env.example .env.local
 ```
 
 ## Usage
 
-**Development (mock data):**
-
 ```bash
-npm run dev
-```
-
-**With real backend:**
-
-```bash
-cp env.example .env.local
-# set NEXT_PUBLIC_TEST_MODE=false
-npm run dev
-```
-
-**Tests:**
-
-```bash
+npm run dev        # development server
+npm run build      # production build
+npm run lint       # eslint check
 npm test           # run tests
-npm run ci         # run all checks (lint, type, test, build)
+npm run ci         # all checks (lint, type, test, build)
 ```
-
-Backend must be running at `http://localhost:8000` for real mode.
 
 ## Features
 
-- Real-time SSE streaming updates
+- Real-time SSE streaming progress updates
 - Dual perspectives (progressive vs conservative)
 - Citation tracking for all claims
 - Query clarification flow
-- Dark theme with Space Mono font
+- Persistent conversation threads at `/chat/[id]`
 
 ## Configuration
 
 `.env.local`:
 
 ```bash
-NEXT_PUBLIC_TEST_MODE=true          # false for real backend
 NEXT_PUBLIC_API_URL=http://localhost:8000
 ```
 
-**Defaults:** Mock mode enabled, backend at localhost:8000
-
 ## Architecture
 
-- **Dependency injection:** `ResearchStream` interface for mock/real backend swapping
-- **Type safety:** TypeScript strict mode
-- **SSE streaming:** Proper cleanup on unmount
-- **Component isolation:** Independent Chat, Progress, Report components
+- **Hooks:** `useResearchThread` manages SSE events via reducer pattern
+- **Components:** `Thread/` for message display, `Chat/` for input
+- **Streaming:** `ResearchStream` interface with proper cleanup
+- **Type safety:** TypeScript strict mode throughout
 
 ## Project Status
 
 **Status:** MVP in development  
-**Stability:** Experimental
+**Stability:** Experimental—APIs may change

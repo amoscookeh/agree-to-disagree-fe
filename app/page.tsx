@@ -1,12 +1,145 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { useRouter } from "next/navigation";
-import { useResearch } from "@/hooks/useResearch";
+import { useResearchThread, type ThreadEvent } from "@/hooks/useResearchThread";
 import { useAuth } from "@/context/AuthContext";
 import { ChatInput } from "@/components/Chat/ChatInput";
 import { AuthModal } from "@/components/Auth/AuthModal";
 import { UserBadge } from "@/components/Auth/UserBadge";
+import { UserMessage } from "@/components/Thread/UserMessage";
+import { AgentUpdate } from "@/components/Thread/AgentUpdate";
+import { ClarificationMessage } from "@/components/Thread/ClarificationMessage";
+import { ReportMessage } from "@/components/Thread/ReportMessage";
+import type { ProgressData, ReportData } from "@/lib/types";
+
+function ProgressLogGroup({
+  events,
+  title,
+  defaultOpen,
+}: {
+  events: ProgressData[];
+  title: string;
+  defaultOpen: boolean;
+}) {
+  const [isOpen, setIsOpen] = useState(defaultOpen);
+
+  if (events.length === 0) return null;
+
+  return (
+    <div className="border border-zinc-700 rounded-lg overflow-hidden mr-8">
+      <button
+        onClick={() => setIsOpen(!isOpen)}
+        className="w-full px-4 py-3 bg-zinc-800/50 hover:bg-zinc-800 transition-colors flex items-center justify-between"
+      >
+        <div className="flex items-center gap-2">
+          <span className="text-sm font-medium text-zinc-300">{title}</span>
+          <span className="text-xs text-zinc-500">
+            ({events.length} events)
+          </span>
+        </div>
+        <span className="text-zinc-500">{isOpen ? "▼" : "▶"}</span>
+      </button>
+      {isOpen && (
+        <div className="p-4 space-y-3 bg-zinc-900/30">
+          {events.map((p, idx) => (
+            <AgentUpdate
+              key={idx}
+              agent={p.agent}
+              status={p.status}
+              message={p.message}
+              details={p.details}
+              timestamp={p.timestamp}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+type GroupedEvent =
+  | { type: "user_query"; query: string; timestamp: string }
+  | {
+      type: "progress_group";
+      events: ProgressData[];
+      afterClarification: boolean;
+    }
+  | {
+      type: "clarification";
+      data: {
+        refined_query: string;
+        questions: string[];
+        suggestions: string[];
+      };
+      timestamp: string;
+    }
+  | { type: "user_response"; response: string; timestamp: string }
+  | { type: "report"; data: ReportData; timestamp: string };
+
+function groupEvents(events: ThreadEvent[]): GroupedEvent[] {
+  const grouped: GroupedEvent[] = [];
+  let currentProgressGroup: ProgressData[] = [];
+  let hadClarification = false;
+
+  const flushProgressGroup = () => {
+    if (currentProgressGroup.length > 0) {
+      grouped.push({
+        type: "progress_group",
+        events: currentProgressGroup,
+        afterClarification: hadClarification,
+      });
+      currentProgressGroup = [];
+    }
+  };
+
+  events.forEach((event) => {
+    switch (event.type) {
+      case "user_query":
+        flushProgressGroup();
+        grouped.push({
+          type: "user_query",
+          query: event.query,
+          timestamp: event.timestamp,
+        });
+        break;
+
+      case "progress":
+        currentProgressGroup.push(event.data);
+        break;
+
+      case "clarification":
+        flushProgressGroup();
+        grouped.push({
+          type: "clarification",
+          data: event.data,
+          timestamp: new Date().toISOString(),
+        });
+        hadClarification = true;
+        break;
+
+      case "user_response":
+        grouped.push({
+          type: "user_response",
+          response: event.response,
+          timestamp: event.timestamp,
+        });
+        break;
+
+      case "report":
+        flushProgressGroup();
+        grouped.push({
+          type: "report",
+          data: event.data,
+          timestamp: new Date().toISOString(),
+        });
+        break;
+    }
+  });
+
+  flushProgressGroup();
+  return grouped;
+}
 
 export default function Home() {
   const router = useRouter();
@@ -15,28 +148,29 @@ export default function Home() {
   const [pendingQuery, setPendingQuery] = useState("");
   const hasProcessedQuery = useRef(false);
 
-  const {
-    status,
-    clarification,
-    progress,
-    report,
-    startResearch,
-    submitClarification,
-    reset,
-  } = useResearch({ token });
+  const { status, events, error, startResearch, submitClarification, reset } =
+    useResearchThread({ token });
 
   const isResearching = status === "researching";
   const isClarifying = status === "clarifying";
   const isComplete = status === "complete";
+  const isError = status === "error";
+  const isActive = isClarifying || isResearching || isComplete || isError;
 
+  // redirect to waitlist if quota exhausted
+  useEffect(() => {
+    if (isError && error?.code === "RATE_LIMITED") {
+      router.push("/waitlist");
+    }
+  }, [isError, error, router]);
+
+  // process pending query after auth
   useEffect(() => {
     if (user && token && pendingQuery && !hasProcessedQuery.current) {
       hasProcessedQuery.current = true;
       const query = pendingQuery;
 
-      setTimeout(() => {
-        setPendingQuery("");
-      }, 0);
+      setTimeout(() => setPendingQuery(""), 0);
 
       if (isQuotaExhausted) {
         router.push("/waitlist");
@@ -62,16 +196,22 @@ export default function Home() {
     startResearch(query);
   };
 
-  const handleAuthSuccess = () => {
-    setShowAuthModal(false);
+  const handleClarificationSubmit = (response: string) => {
+    submitClarification(response);
   };
+
+  const handleReset = () => {
+    reset();
+  };
+
+  const groupedEvents = useMemo(() => groupEvents(events), [events]);
 
   return (
     <div className="min-h-screen bg-[#0a0a0a] text-zinc-100 relative">
       <AuthModal
         isOpen={showAuthModal}
         onClose={() => setShowAuthModal(false)}
-        onSuccess={handleAuthSuccess}
+        onSuccess={() => setShowAuthModal(false)}
       />
 
       <div className="relative z-10 flex flex-col min-h-screen max-w-4xl mx-auto px-6 py-12">
@@ -89,6 +229,7 @@ export default function Home() {
             )}
           </div>
         )}
+
         {status === "idle" && (
           <div className="flex-1 flex flex-col items-center justify-center">
             <div className="text-center mb-16">
@@ -102,11 +243,11 @@ export default function Home() {
           </div>
         )}
 
-        {(isClarifying || isResearching || isComplete) && (
+        {isActive && (
           <div className="flex-1 mb-8">
             <div className="mb-8">
               <button
-                onClick={reset}
+                onClick={handleReset}
                 className="text-teal-500 hover:text-teal-400 text-sm transition-colors"
               >
                 ← New research
@@ -114,179 +255,88 @@ export default function Home() {
             </div>
 
             <div className="space-y-4">
-              {progress.map((p, idx) => (
-                <div
-                  key={idx}
-                  className="border border-zinc-700/50 rounded-lg p-4 bg-zinc-800/30"
-                >
-                  <div className="flex items-center gap-3 mb-2">
-                    <span className="text-teal-500 text-xs uppercase tracking-wider">
-                      {p.agent.replace("_", " ")}
-                    </span>
-                    <span className="text-zinc-600">•</span>
-                    <span className="text-zinc-400 text-sm">{p.status}</span>
-                  </div>
-                  <p className="text-zinc-300 text-sm">{p.message}</p>
-                  {p.sources_searched.length > 0 && (
-                    <div className="mt-2 flex gap-2 flex-wrap">
-                      {p.sources_searched.map((source) => (
-                        <span
-                          key={source}
-                          className="text-xs bg-zinc-700/50 px-2 py-1 rounded text-zinc-400"
-                        >
-                          {source}
-                        </span>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              ))}
+              {groupedEvents.map((event, idx) => {
+                switch (event.type) {
+                  case "user_query":
+                    return (
+                      <UserMessage
+                        key={idx}
+                        query={event.query}
+                        timestamp={event.timestamp}
+                      />
+                    );
 
-              {isClarifying && clarification && (
-                <div className="border border-teal-800 rounded-lg p-6 bg-teal-950/30">
-                  <h3 className="text-lg font-semibold mb-3 text-teal-400">
-                    I need more details to research this accurately
-                  </h3>
-                  <p className="text-zinc-400 text-sm mb-4">
-                    {clarification.refined_query}
-                  </p>
-                  {clarification.questions.length > 0 && (
-                    <div className="space-y-2">
-                      <p className="text-sm font-medium text-zinc-300">
-                        Please clarify:
-                      </p>
-                      <ul className="space-y-2">
-                        {clarification.questions.map((question, idx) => (
-                          <li
-                            key={idx}
-                            className="text-zinc-400 text-sm flex gap-3"
-                          >
-                            <span className="text-teal-500">•</span>
-                            <span>{question}</span>
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
-                </div>
-              )}
+                  case "progress_group":
+                    return (
+                      <ProgressLogGroup
+                        key={idx}
+                        events={event.events}
+                        title={
+                          event.afterClarification
+                            ? "Continued Research Progress"
+                            : "Research Progress Log"
+                        }
+                        defaultOpen={true}
+                      />
+                    );
+
+                  case "clarification":
+                    return (
+                      <ClarificationMessage
+                        key={idx}
+                        question={event.data.refined_query}
+                        questions={event.data.questions}
+                        suggestions={event.data.suggestions}
+                        timestamp={event.timestamp}
+                      />
+                    );
+
+                  case "user_response":
+                    return (
+                      <UserMessage
+                        key={idx}
+                        query={event.response}
+                        timestamp={event.timestamp}
+                        isResponse
+                      />
+                    );
+
+                  case "report":
+                    return (
+                      <ReportMessage
+                        key={idx}
+                        report={event.data}
+                        timestamp={event.timestamp}
+                      />
+                    );
+
+                  default:
+                    return null;
+                }
+              })}
             </div>
 
-            {isComplete && report && (
-              <div className="border border-zinc-800 rounded-lg p-6 bg-zinc-900/50 space-y-6">
-                <div>
-                  <h2 className="text-2xl font-bold mb-3 text-teal-500">
-                    Research Complete
-                  </h2>
-                  <p className="text-zinc-300 leading-relaxed text-sm">
-                    {report.summary}
+            {isError && error && (
+              <div className="border border-red-800 rounded-lg p-6 bg-red-950/30 mt-4 mr-8">
+                <h3 className="text-lg font-semibold mb-3 text-red-400">
+                  {error.code === "RATE_LIMITED"
+                    ? "Research Quota Exhausted"
+                    : "Research Error"}
+                </h3>
+                <p className="text-zinc-400 text-sm mb-4">{error.message}</p>
+                {error.code === "RATE_LIMITED" && (
+                  <p className="text-zinc-500 text-xs">
+                    Redirecting to waitlist...
                   </p>
-                </div>
-
-                <div className="grid md:grid-cols-2 gap-4">
-                  <div className="border border-zinc-700 rounded-lg p-4 bg-zinc-800/50">
-                    <div className="text-xs uppercase tracking-wider text-teal-500 mb-2">
-                      {report.claim_a.stance}
-                    </div>
-                    <h3 className="text-xl font-bold mb-4">
-                      {report.claim_a.title}
-                    </h3>
-                    <div className="space-y-3">
-                      {report.claim_a.evidence.map((ev, idx) => (
-                        <div key={idx} className="text-sm">
-                          <p className="text-zinc-300 mb-1">{ev.claim}</p>
-                          <a
-                            href={ev.url}
-                            className="text-teal-500 hover:text-teal-400 text-xs"
-                            target="_blank"
-                            rel="noopener noreferrer"
-                          >
-                            {ev.source} →
-                          </a>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-
-                  <div className="border border-zinc-700 rounded-lg p-4 bg-zinc-800/50">
-                    <div className="text-xs uppercase tracking-wider text-amber-500 mb-2">
-                      {report.claim_b.stance}
-                    </div>
-                    <h3 className="text-xl font-bold mb-4">
-                      {report.claim_b.title}
-                    </h3>
-                    <div className="space-y-3">
-                      {report.claim_b.evidence.map((ev, idx) => (
-                        <div key={idx} className="text-sm">
-                          <p className="text-zinc-300 mb-1">{ev.claim}</p>
-                          <a
-                            href={ev.url}
-                            className="text-amber-500 hover:text-amber-400 text-xs"
-                            target="_blank"
-                            rel="noopener noreferrer"
-                          >
-                            {ev.source} →
-                          </a>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-
-                {report.agreements.length > 0 && (
-                  <div className="border border-zinc-700 rounded-lg p-4 bg-zinc-800/50">
-                    <h3 className="text-lg font-bold mb-3">
-                      Areas of Agreement
-                    </h3>
-                    <ul className="space-y-2">
-                      {report.agreements.map((agreement, idx) => (
-                        <li key={idx} className="text-zinc-400 text-sm">
-                          • {agreement}
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
                 )}
-
-                {report.disagreements.length > 0 && (
-                  <div className="border border-zinc-700 rounded-lg p-4 bg-zinc-800/50">
-                    <h3 className="text-lg font-bold mb-3">
-                      Key Disagreements
-                    </h3>
-                    <div className="space-y-4">
-                      {report.disagreements.map((dis, idx) => (
-                        <div key={idx}>
-                          <h4 className="text-teal-500 font-bold text-sm mb-2">
-                            {dis.topic}
-                          </h4>
-                          <div className="grid md:grid-cols-2 gap-4 text-sm">
-                            <div>
-                              <span className="text-zinc-500">Left: </span>
-                              <span className="text-zinc-300">
-                                {dis.left_position}
-                              </span>
-                            </div>
-                            <div>
-                              <span className="text-zinc-500">Right: </span>
-                              <span className="text-zinc-300">
-                                {dis.right_position}
-                              </span>
-                            </div>
-                          </div>
-                          <p className="text-zinc-500 text-xs mt-2">
-                            {dis.reason}
-                          </p>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
+                {error.recoverable && error.code !== "RATE_LIMITED" && (
+                  <button
+                    onClick={handleReset}
+                    className="text-teal-500 hover:text-teal-400 text-sm"
+                  >
+                    Try again
+                  </button>
                 )}
-
-                <div className="text-xs text-zinc-500 pt-2 border-t border-zinc-700">
-                  {report.metadata.sources_searched} sources •{" "}
-                  {report.metadata.total_results} results •{" "}
-                  {(report.metadata.processing_time_ms / 1000).toFixed(1)}s
-                </div>
               </div>
             )}
           </div>
@@ -294,7 +344,9 @@ export default function Home() {
 
         <div className="mt-auto pt-8">
           <ChatInput
-            onSubmit={isClarifying ? submitClarification : handleStartResearch}
+            onSubmit={
+              isClarifying ? handleClarificationSubmit : handleStartResearch
+            }
             disabled={isResearching}
             placeholder={
               isClarifying

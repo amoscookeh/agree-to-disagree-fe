@@ -7,7 +7,7 @@ import {
 
 describe("ResearchStream", () => {
   describe("MockResearchStream", () => {
-    it("should yield progress and report events", async () => {
+    it("should yield thread, progress, and report events", async () => {
       const mock = new MockResearchStream();
       const events = [];
 
@@ -16,7 +16,7 @@ describe("ResearchStream", () => {
       }
 
       expect(events.length).toBeGreaterThan(0);
-      expect(events[0].type).toBe("progress");
+      expect(events[0].type).toBe("thread");
       expect(events[events.length - 1].type).toBe("done");
 
       const reportEvent = events.find((e) => e.type === "report");
@@ -73,8 +73,8 @@ describe("ResearchStream", () => {
   });
 
   describe("researchStream default", () => {
-    it("should default to MockResearchStream when NEXT_PUBLIC_TEST_MODE is not set", () => {
-      expect(researchStream).toBeInstanceOf(MockResearchStream);
+    it("should always use APIResearchStream for real backend", () => {
+      expect(researchStream).toBeInstanceOf(APIResearchStream);
     });
   });
 });

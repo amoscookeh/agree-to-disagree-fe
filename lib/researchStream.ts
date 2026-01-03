@@ -1,10 +1,13 @@
-import {
+import { config } from "./config";
+import type {
   SSEEvent,
   AgentName,
   AgentStatus,
   ClaimData,
   DisagreementItem,
   Citation,
+  ToolCall,
+  IdeologicalLean,
 } from "./types";
 
 export interface ResearchStream {
@@ -17,6 +20,16 @@ export interface ResearchStream {
 export class MockResearchStream implements ResearchStream {
   async *stream(query: string): AsyncGenerator<SSEEvent> {
     const threadId = crypto.randomUUID();
+    const queryId = crypto.randomUUID();
+
+    await delay(300);
+    yield {
+      type: "thread",
+      data: {
+        thread_id: threadId,
+        query_id: queryId,
+      },
+    };
 
     await delay(500);
     yield {
@@ -324,6 +337,7 @@ export class MockResearchStream implements ResearchStream {
       type: "done",
       data: {
         thread_id: threadId,
+        query_id: queryId,
         success: true,
       },
     };
@@ -335,8 +349,7 @@ export class APIResearchStream implements ResearchStream {
   private getToken?: () => string | null;
 
   constructor(apiUrl?: string, getToken?: () => string | null) {
-    this.apiUrl =
-      apiUrl || process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+    this.apiUrl = apiUrl || config.apiUrl;
     this.getToken = getToken;
   }
 
@@ -366,12 +379,32 @@ export class APIResearchStream implements ResearchStream {
       });
 
       if (!response.ok) {
+        let errorMessage = `Backend returned error: ${response.status}`;
+        let errorCode: "RESEARCH_FAILED" | "RATE_LIMITED" | "INTERNAL_ERROR" =
+          "RESEARCH_FAILED";
+
+        try {
+          const errorData = await response.json();
+          if (errorData.detail) {
+            errorMessage = errorData.detail;
+          }
+
+          if (
+            response.status === 403 &&
+            errorMessage.toLowerCase().includes("quota")
+          ) {
+            errorCode = "RATE_LIMITED";
+          }
+        } catch {
+          // ignore json parse errors
+        }
+
         yield {
           type: "error",
           data: {
-            code: "RESEARCH_FAILED",
-            message: `Backend returned error: ${response.status}`,
-            recoverable: true,
+            code: errorCode,
+            message: errorMessage,
+            recoverable: errorCode !== "RATE_LIMITED",
           },
         };
         return;
@@ -434,21 +467,64 @@ export class APIResearchStream implements ResearchStream {
 
     // handle events with explicit type field
     switch (type) {
+      case "thread":
+        const threadData = raw.data as Record<string, unknown> | undefined;
+        return {
+          type: "thread",
+          data: {
+            thread_id:
+              (threadData?.thread_id as string) ||
+              (raw.thread_id as string) ||
+              "",
+            query_id:
+              (threadData?.query_id as string) ||
+              (raw.query_id as string) ||
+              "",
+          },
+        };
+
       case "progress":
-        // progress events have: {type: "progress", agent, status, message, timestamp, ...}
+        // progress events have: {type: "progress", data: {agent, status, message, ...}}
+        const progressData = raw.data as Record<string, unknown> | undefined;
+
+        // check if data is nested or at root level
+        const agent = (progressData?.agent || raw.agent) as AgentName;
+        const status = (progressData?.status || raw.status) as AgentStatus;
+        const message = (progressData?.message || raw.message) as string;
+
+        if (!agent || !status || !message) {
+          console.warn("Invalid progress event, missing required fields:", raw);
+          return null;
+        }
+
         return {
           type: "progress",
           data: {
-            agent: raw.agent as AgentName,
-            status: raw.status as AgentStatus,
-            message: raw.message as string,
-            tool_calls: [],
+            agent,
+            status,
+            message,
+            tool_calls:
+              (progressData?.tool_calls as ToolCall[]) ||
+              (raw.tool_calls as ToolCall[]) ||
+              [],
             sources_searched:
+              (progressData?.sources_searched as string[]) ||
               (raw.sources_searched as string[]) ||
+              (progressData?.sources as string[]) ||
               (raw.sources as string[]) ||
               [],
-            results_count: raw.results_count as number | undefined,
-            timestamp: (raw.timestamp as string) || new Date().toISOString(),
+            results_count:
+              (progressData?.results_count as number) ||
+              (raw.results_count as number) ||
+              undefined,
+            timestamp:
+              (progressData?.timestamp as string) ||
+              (raw.timestamp as string) ||
+              new Date().toISOString(),
+            details:
+              (progressData?.details as Record<string, unknown>) ||
+              (raw.details as Record<string, unknown>) ||
+              undefined,
           },
         };
 
@@ -481,23 +557,47 @@ export class APIResearchStream implements ResearchStream {
 
       case "report":
         const reportData = raw.data as Record<string, unknown>;
+        const rawCitations =
+          (reportData.citations as Record<string, unknown>[]) || [];
+
+        const formattedCitations: Citation[] = rawCitations.map((c) => ({
+          id: (c.id as string) || `cite-${Math.random()}`,
+          source_name:
+            (c.source as string) || (c.source_name as string) || "Unknown",
+          title: (c.title as string) || (c.claim as string) || "",
+          url: (c.url as string) || "",
+          published_date: c.published_date as string | undefined,
+          ideological_lean:
+            ((c.perspective || c.ideological_lean) as IdeologicalLean) ||
+            "neutral",
+          snippet: (c.claim as string) || (c.snippet as string) || "",
+        }));
+
+        const metadata = reportData.metadata as
+          | Record<string, unknown>
+          | undefined;
+
         return {
           type: "report",
           data: {
-            thread_id: "",
+            thread_id: (reportData.thread_id as string) || "",
             summary: reportData.summary as string,
             claim_a: reportData.claim_a as ClaimData,
             claim_b: reportData.claim_b as ClaimData,
-            agreements: reportData.agreements as string[],
-            disagreements: reportData.disagreements as DisagreementItem[],
-            uncertainties: reportData.uncertainties as string[],
-            citations: (raw.citations as Citation[]) || [],
-            metadata: {
-              sources_searched: 0,
-              total_results: 0,
-              citation_score: 0,
-              processing_time_ms: 0,
-            },
+            agreements: (reportData.agreements as string[]) || [],
+            disagreements:
+              (reportData.disagreements as DisagreementItem[]) || [],
+            uncertainties: (reportData.uncertainties as string[]) || [],
+            citations: formattedCitations,
+            metadata: metadata
+              ? {
+                  sources_searched: (metadata.sources_searched as number) || 0,
+                  total_results: (metadata.total_results as number) || 0,
+                  citation_score: (metadata.citation_score as number) || 0,
+                  processing_time_ms:
+                    (metadata.processing_time_ms as number) || 0,
+                }
+              : undefined,
           },
         };
 
@@ -512,35 +612,63 @@ export class APIResearchStream implements ResearchStream {
         };
 
       case "done":
+        const doneData = raw.data as Record<string, unknown> | undefined;
         return {
           type: "done",
           data: {
-            thread_id: "",
+            thread_id:
+              (doneData?.thread_id as string) ||
+              (raw.thread_id as string) ||
+              "",
+            query_id:
+              (doneData?.query_id as string) || (raw.query_id as string) || "",
             success: true,
           },
         };
 
       default:
         // fallback: if no type but has agent/status/message, treat as progress
-        if (raw.agent && raw.status && raw.message) {
+        const fallbackData = raw.data as Record<string, unknown> | undefined;
+        const fallbackAgent = (fallbackData?.agent || raw.agent) as AgentName;
+        const fallbackStatus = (fallbackData?.status ||
+          raw.status) as AgentStatus;
+        const fallbackMessage = (fallbackData?.message ||
+          raw.message) as string;
+
+        if (fallbackAgent && fallbackStatus && fallbackMessage) {
           return {
             type: "progress",
             data: {
-              agent: raw.agent as AgentName,
-              status: raw.status as AgentStatus,
-              message: raw.message as string,
-              tool_calls: [],
+              agent: fallbackAgent,
+              status: fallbackStatus,
+              message: fallbackMessage,
+              tool_calls:
+                (fallbackData?.tool_calls as ToolCall[]) ||
+                (raw.tool_calls as ToolCall[]) ||
+                [],
               sources_searched:
+                (fallbackData?.sources_searched as string[]) ||
                 (raw.sources_searched as string[]) ||
+                (fallbackData?.sources as string[]) ||
                 (raw.sources as string[]) ||
                 [],
-              results_count: raw.results_count as number | undefined,
-              timestamp: (raw.timestamp as string) || new Date().toISOString(),
+              results_count:
+                (fallbackData?.results_count as number) ||
+                (raw.results_count as number) ||
+                undefined,
+              timestamp:
+                (fallbackData?.timestamp as string) ||
+                (raw.timestamp as string) ||
+                new Date().toISOString(),
+              details:
+                (fallbackData?.details as Record<string, unknown>) ||
+                (raw.details as Record<string, unknown>) ||
+                undefined,
             },
           };
         }
 
-        console.log("Unknown event format:", raw);
+        console.warn("Unknown event format:", raw);
         return null;
     }
   }
@@ -550,8 +678,5 @@ function delay(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-// dep injection for research stream
-const isTestMode = process.env.NEXT_PUBLIC_TEST_MODE !== "false";
-export const researchStream: ResearchStream = isTestMode
-  ? new MockResearchStream()
-  : new APIResearchStream();
+// always use real API for research - mock is only for component testing
+export const researchStream: ResearchStream = new APIResearchStream();
