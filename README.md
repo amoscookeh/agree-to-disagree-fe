@@ -2,6 +2,8 @@
 
 Next.js chat interface for balanced political research—surfaces progressive and conservative perspectives with real-time streaming and citations.
 
+**Live Demo:** https://agree2disagree.vercel.app/ (backend sleeps after inactivity—give it ~30s to wake up)
+
 **Backend Repository:** [agree-to-disagree-be](https://github.com/amoscookeh/agree-to-disagree-be)
 
 **The Problem:** Political information is fragmented across biased sources, making it time-consuming and difficult for people to understand multiple perspectives. Most Americans rely on 1-2 sources that fit their existing views or get lost in information overload when trying to research opposing viewpoints. This contributes to polarization and poorly-informed political opinions.
