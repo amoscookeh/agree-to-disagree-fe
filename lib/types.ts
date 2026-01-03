@@ -1,12 +1,14 @@
 export type IdeologicalLean = "left" | "right" | "neutral";
 
 export type AgentName =
+  | "classification"
   | "clarification"
   | "left_research"
   | "right_research"
   | "academic_research"
   | "synthesis"
-  | "quality_check";
+  | "quality_check"
+  | "followup";
 
 export type AgentStatus =
   | "starting"
