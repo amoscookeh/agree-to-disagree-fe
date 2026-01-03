@@ -5,8 +5,13 @@ import {
   useContext,
   useState,
   useEffect,
+  useCallback,
   ReactNode,
 } from "react";
+import { config } from "@/lib/config";
+import { getItem, setItem, removeItem } from "@/lib/storage";
+
+const TOKEN_KEY = "token";
 
 interface User {
   id: string;
@@ -36,53 +41,53 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [token, setToken] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
-  const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
-
-  useEffect(() => {
-    const savedToken = localStorage.getItem("token");
-    if (savedToken) {
-      setToken(savedToken);
-      fetchUser(savedToken);
-    } else {
-      setIsLoading(false);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  const fetchUser = async (t: string) => {
+  const fetchUser = useCallback(async (t: string) => {
     try {
-      const res = await fetch(`${API_URL}/api/auth/me`, {
+      const res = await fetch(`${config.apiUrl}/api/auth/me`, {
         headers: { Authorization: `Bearer ${t}` },
       });
       if (res.ok) {
         const data = await res.json();
         setUser(data);
       } else {
-        localStorage.removeItem("token");
+        console.warn("Auth token invalid or expired, clearing session");
+        removeItem(TOKEN_KEY);
         setToken(null);
+        setUser(null);
       }
-    } catch {
-      // ignore
+    } catch (err) {
+      console.error("Failed to fetch user:", err);
+      // don't clear token on network errors, might be temporary
     } finally {
       setIsLoading(false);
     }
-  };
+  }, []);
 
-  const login = async (username: string, password: string) => {
-    const res = await fetch(`${API_URL}/api/auth/login`, {
+  useEffect(() => {
+    const savedToken = getItem(TOKEN_KEY);
+    if (savedToken) {
+      setToken(savedToken);
+      fetchUser(savedToken);
+    } else {
+      setIsLoading(false);
+    }
+  }, [fetchUser]);
+
+  const login = useCallback(async (username: string, password: string) => {
+    const res = await fetch(`${config.apiUrl}/api/auth/login`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ username, password }),
     });
     if (!res.ok) throw new Error("Invalid credentials");
     const data = await res.json();
-    localStorage.setItem("token", data.access_token);
+    setItem(TOKEN_KEY, data.access_token);
     setToken(data.access_token);
     setUser(data.user);
-  };
+  }, []);
 
-  const register = async (username: string, password: string) => {
-    const res = await fetch(`${API_URL}/api/auth/register`, {
+  const register = useCallback(async (username: string, password: string) => {
+    const res = await fetch(`${config.apiUrl}/api/auth/register`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ username, password }),
@@ -92,29 +97,32 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       throw new Error(err.detail || "Registration failed");
     }
     const data = await res.json();
-    localStorage.setItem("token", data.access_token);
+    setItem(TOKEN_KEY, data.access_token);
     setToken(data.access_token);
     setUser(data.user);
-  };
+  }, []);
 
-  const checkUsername = async (username: string): Promise<boolean> => {
-    const res = await fetch(
-      `${API_URL}/api/auth/check-username?username=${encodeURIComponent(username)}`
-    );
-    if (!res.ok) throw new Error("Failed to check username");
-    const data = await res.json();
-    return data.exists;
-  };
+  const checkUsername = useCallback(
+    async (username: string): Promise<boolean> => {
+      const res = await fetch(
+        `${config.apiUrl}/api/auth/check-username?username=${encodeURIComponent(username)}`
+      );
+      if (!res.ok) throw new Error("Failed to check username");
+      const data = await res.json();
+      return data.exists;
+    },
+    []
+  );
 
-  const logout = () => {
-    localStorage.removeItem("token");
+  const logout = useCallback(() => {
+    removeItem(TOKEN_KEY);
     setToken(null);
     setUser(null);
-  };
+  }, []);
 
-  const refreshUser = async () => {
+  const refreshUser = useCallback(async () => {
     if (token) await fetchUser(token);
-  };
+  }, [token, fetchUser]);
 
   const isQuotaExhausted = user
     ? user.researches_used >= user.max_researches

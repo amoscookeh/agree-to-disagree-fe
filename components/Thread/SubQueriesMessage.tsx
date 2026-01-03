@@ -20,6 +20,8 @@ function AngleBadge({ angle }: { angle: SubQueryAngle }) {
   return (
     <span
       className={`text-[10px] px-1.5 py-0.5 rounded border font-medium uppercase tracking-wider ${styles[angle]}`}
+      role="status"
+      aria-label={`${labels[angle]} perspective`}
     >
       {labels[angle]}
     </span>
@@ -28,13 +30,17 @@ function AngleBadge({ angle }: { angle: SubQueryAngle }) {
 
 export function SubQueriesMessage({ data }: SubQueriesMessageProps) {
   return (
-    <div className="border border-amber-800/50 rounded-lg p-4 bg-amber-950/20 mr-8">
-      <div className="flex items-center gap-2 mb-3 text-xs text-amber-500">
+    <article
+      className="border border-amber-800/50 rounded-lg p-4 bg-amber-950/20 mr-8"
+      aria-label="Research plan"
+    >
+      <header className="flex items-center gap-2 mb-3 text-xs text-amber-500">
         <svg
           className="w-4 h-4"
           fill="none"
           stroke="currentColor"
           viewBox="0 0 24 24"
+          aria-hidden="true"
         >
           <path
             strokeLinecap="round"
@@ -44,26 +50,26 @@ export function SubQueriesMessage({ data }: SubQueriesMessageProps) {
           />
         </svg>
         <span>Research Plan</span>
-        <span>•</span>
+        <span aria-hidden="true">•</span>
         <span className="text-amber-400/70">Cycle {data.cycle}</span>
-      </div>
+      </header>
 
       <p className="text-zinc-400 text-sm mb-3">
         Investigating {data.sub_queries.length} research direction
         {data.sub_queries.length !== 1 ? "s" : ""}:
       </p>
 
-      <div className="space-y-2">
+      <ul className="space-y-2" aria-label="Sub-queries to investigate">
         {data.sub_queries.map((sq) => (
-          <div
+          <li
             key={sq.id}
             className="flex items-start gap-2 p-2 rounded bg-zinc-800/50"
           >
             <AngleBadge angle={sq.angle} />
             <span className="text-zinc-300 text-sm flex-1">{sq.query}</span>
-          </div>
+          </li>
         ))}
-      </div>
-    </div>
+      </ul>
+    </article>
   );
 }

@@ -1,22 +1,26 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
 import { fetchThreads, deleteThread, Thread } from "@/lib/api";
+import { formatRelativeDate } from "@/lib/dateUtils";
 
-interface ChatHistoryProps {
+const THREADS_PAGE_SIZE = 30;
+
+interface HistorySidebarProps {
   isOpen: boolean;
   onToggle: () => void;
 }
 
-export function ChatHistory({ isOpen, onToggle }: ChatHistoryProps) {
+export function HistorySidebar({ isOpen, onToggle }: HistorySidebarProps) {
   const router = useRouter();
   const pathname = usePathname();
   const { token, user } = useAuth();
   const [threads, setThreads] = useState<Thread[]>([]);
   const [loading, setLoading] = useState(false);
   const [hasMore, setHasMore] = useState(true);
+  const offsetRef = useRef(0);
 
   const loadThreads = useCallback(
     async (reset = false) => {
@@ -24,155 +28,177 @@ export function ChatHistory({ isOpen, onToggle }: ChatHistoryProps) {
 
       setLoading(true);
       try {
-        const offset = reset ? 0 : threads.length;
-        const result = await fetchThreads(token, 30, offset);
+        const offset = reset ? 0 : offsetRef.current;
+        const result = await fetchThreads(token, THREADS_PAGE_SIZE, offset);
 
         if (reset) {
           setThreads(result.threads);
+          offsetRef.current = result.threads.length;
         } else {
           setThreads((prev) => [...prev, ...result.threads]);
+          offsetRef.current += result.threads.length;
         }
-        setHasMore(result.threads.length === 30);
+        setHasMore(result.threads.length === THREADS_PAGE_SIZE);
       } catch (err) {
         console.error("Failed to load threads:", err);
         setThreads([]);
+        offsetRef.current = 0;
       } finally {
         setLoading(false);
       }
     },
-    [token, threads.length]
+    [token]
   );
 
   useEffect(() => {
-    if (token) loadThreads(true);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [token]);
-
-  const handleDelete = async (e: React.MouseEvent, threadId: string) => {
-    e.stopPropagation();
-    if (!token) return;
-
-    try {
-      await deleteThread(token, threadId);
-      setThreads((prev) => prev.filter((t) => t.id !== threadId));
-      if (pathname === `/chat/${threadId}`) {
-        router.push("/");
-      }
-    } catch (err) {
-      console.error("Failed to delete:", err);
+    if (token) {
+      loadThreads(true);
     }
-  };
+  }, [token, loadThreads]);
+
+  const handleDelete = useCallback(
+    async (e: React.MouseEvent, threadId: string) => {
+      e.stopPropagation();
+      if (!token) return;
+
+      try {
+        await deleteThread(token, threadId);
+        setThreads((prev) => prev.filter((t) => t.id !== threadId));
+        offsetRef.current -= 1;
+        if (pathname === `/chat/${threadId}`) {
+          router.push("/");
+        }
+      } catch (err) {
+        console.error("Failed to delete:", err);
+      }
+    },
+    [token, pathname, router]
+  );
+
+  const handleRefresh = useCallback(() => {
+    loadThreads(true);
+  }, [loadThreads]);
+
+  const handleLoadMore = useCallback(() => {
+    loadThreads(false);
+  }, [loadThreads]);
+
+  const handleNewResearch = useCallback(() => {
+    router.push("/");
+  }, [router]);
+
+  const handleSelectThread = useCallback(
+    (threadId: string) => {
+      router.push(`/chat/${threadId}`);
+    },
+    [router]
+  );
 
   const currentThreadId = pathname.startsWith("/chat/")
     ? pathname.split("/chat/")[1]
     : null;
 
-  const formatDate = (dateStr: string) => {
-    const date = new Date(dateStr);
-    const now = new Date();
-    const diffMs = now.getTime() - date.getTime();
-    const diffHours = diffMs / (1000 * 60 * 60);
-
-    if (diffHours < 24) {
-      return date.toLocaleTimeString([], {
-        hour: "2-digit",
-        minute: "2-digit",
-      });
-    } else if (diffHours < 24 * 7) {
-      return date.toLocaleDateString([], { weekday: "short" });
-    }
-    return date.toLocaleDateString([], { month: "short", day: "numeric" });
-  };
-
   if (!user) return null;
+
+  const completedThreads = threads.filter((t) => t.is_completed);
 
   return (
     <>
       <aside
+        role="navigation"
+        aria-label="Research history"
         className={`
           fixed left-0 top-0 h-full bg-zinc-900 border-r border-zinc-800
           transition-all duration-300 z-40 flex flex-col
           ${isOpen ? "w-72" : "w-0 overflow-hidden"}
         `}
       >
-        <div className="p-4 border-b border-zinc-800 flex items-center justify-between shrink-0">
+        <header className="p-4 border-b border-zinc-800 flex items-center justify-between shrink-0">
           <h2 className="font-semibold text-zinc-200">Research History</h2>
           <button
-            onClick={() => loadThreads(true)}
+            onClick={handleRefresh}
             className="p-1.5 hover:bg-zinc-800 rounded transition-colors"
-            title="Refresh"
+            aria-label="Refresh history"
           >
-            <RefreshIcon />
+            <RefreshIcon aria-hidden="true" />
           </button>
-        </div>
+        </header>
 
         <div className="p-3 border-b border-zinc-800">
           <button
-            onClick={() => router.push("/")}
+            onClick={handleNewResearch}
             className="w-full bg-teal-600 hover:bg-teal-500 text-white px-4 py-2 rounded font-medium text-sm transition-colors"
           >
             + New Research
           </button>
         </div>
 
-        <div className="flex-1 overflow-y-auto">
+        <nav className="flex-1 overflow-y-auto" aria-label="Research threads">
           {loading && threads.length === 0 ? (
-            <div className="flex justify-center p-4">
+            <div className="flex justify-center p-4" role="status">
               <span className="loading loading-spinner loading-sm text-teal-500" />
+              <span className="sr-only">Loading threads...</span>
             </div>
-          ) : threads.filter((t) => t.is_completed).length === 0 ? (
+          ) : completedThreads.length === 0 ? (
             <p className="p-4 text-center text-zinc-500 text-sm">
               No research history yet
             </p>
           ) : (
-            <div className="py-2">
-              {threads
-                .filter((thread) => thread.is_completed)
-                .map((thread) => (
-                  <div key={thread.id} className="relative group">
-                    <button
-                      onClick={() => router.push(`/chat/${thread.id}`)}
-                      className={`
+            <ul className="py-2">
+              {completedThreads.map((thread) => (
+                <li key={thread.id} className="relative group">
+                  <button
+                    onClick={() => handleSelectThread(thread.id)}
+                    className={`
                       w-full px-4 py-3 text-left hover:bg-zinc-800/50 transition-colors pr-10
                       ${currentThreadId === thread.id ? "bg-zinc-800 border-l-2 border-teal-500" : ""}
                     `}
-                    >
-                      <div className="flex items-start justify-between gap-2">
-                        <span className="text-sm text-zinc-300 line-clamp-2 flex-1">
-                          {thread.title || thread.query_text || "Untitled"}
-                        </span>
-                        <span className="text-xs text-zinc-600 shrink-0">
-                          {formatDate(thread.created_at)}
-                        </span>
-                      </div>
-                    </button>
-                    <button
-                      onClick={(e) => handleDelete(e, thread.id)}
-                      className="absolute right-2 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 p-1.5 hover:bg-red-500/20 rounded transition-all"
-                      title="Delete"
-                    >
-                      <TrashIcon />
-                    </button>
-                  </div>
-                ))}
+                    aria-current={
+                      currentThreadId === thread.id ? "page" : undefined
+                    }
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <span className="text-sm text-zinc-300 line-clamp-2 flex-1">
+                        {thread.title || thread.query_text || "Untitled"}
+                      </span>
+                      <time
+                        className="text-xs text-zinc-600 shrink-0"
+                        dateTime={thread.created_at}
+                      >
+                        {formatRelativeDate(thread.created_at)}
+                      </time>
+                    </div>
+                  </button>
+                  <button
+                    onClick={(e) => handleDelete(e, thread.id)}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 p-1.5 hover:bg-red-500/20 rounded transition-all"
+                    aria-label={`Delete "${thread.title || thread.query_text || "Untitled"}"`}
+                  >
+                    <TrashIcon aria-hidden="true" />
+                  </button>
+                </li>
+              ))}
 
               {hasMore && !loading && (
-                <button
-                  onClick={() => loadThreads(false)}
-                  className="w-full py-2 text-sm text-teal-500 hover:text-teal-400 transition-colors"
-                >
-                  Load more
-                </button>
+                <li>
+                  <button
+                    onClick={handleLoadMore}
+                    className="w-full py-2 text-sm text-teal-500 hover:text-teal-400 transition-colors"
+                  >
+                    Load more
+                  </button>
+                </li>
               )}
 
               {loading && threads.length > 0 && (
-                <div className="flex justify-center p-4">
+                <li className="flex justify-center p-4" role="status">
                   <span className="loading loading-spinner loading-sm text-teal-500" />
-                </div>
+                  <span className="sr-only">Loading more threads...</span>
+                </li>
               )}
-            </div>
+            </ul>
           )}
-        </div>
+        </nav>
       </aside>
 
       <button
@@ -182,10 +208,12 @@ export function ChatHistory({ isOpen, onToggle }: ChatHistoryProps) {
           hover:bg-zinc-700 transition-all duration-300
           ${isOpen ? "left-72" : "left-0"}
         `}
-        title={isOpen ? "Close sidebar" : "Open sidebar"}
+        aria-label={isOpen ? "Close sidebar" : "Open sidebar"}
+        aria-expanded={isOpen}
       >
         <ChevronIcon
-          className={`w-5 h-5 text-zinc-400 ${isOpen ? "rotate-180" : ""}`}
+          className={`w-5 h-5 text-zinc-400 transition-transform ${isOpen ? "rotate-180" : ""}`}
+          aria-hidden="true"
         />
       </button>
     </>
@@ -198,6 +226,7 @@ const RefreshIcon = () => (
     fill="none"
     stroke="currentColor"
     viewBox="0 0 24 24"
+    role="img"
   >
     <path
       strokeLinecap="round"
@@ -214,6 +243,7 @@ const TrashIcon = () => (
     fill="none"
     stroke="currentColor"
     viewBox="0 0 24 24"
+    role="img"
   >
     <path
       strokeLinecap="round"
@@ -230,6 +260,7 @@ const ChevronIcon = ({ className }: { className?: string }) => (
     fill="none"
     stroke="currentColor"
     viewBox="0 0 24 24"
+    role="img"
   >
     <path
       strokeLinecap="round"
@@ -240,4 +271,5 @@ const ChevronIcon = ({ className }: { className?: string }) => (
   </svg>
 );
 
-export { ChatHistory as HistorySidebar };
+// backward compatibility export
+export { HistorySidebar as ChatHistory };
