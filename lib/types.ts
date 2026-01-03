@@ -20,6 +20,7 @@ export type SSEEventType =
   | "clarification"
   | "progress"
   | "report"
+  | "followup_answer"
   | "error"
   | "done";
 
@@ -202,6 +203,7 @@ export type SSEEvent =
   | SSEClarificationEvent
   | SSEProgressEvent
   | SSEReportEvent
+  | SSEFollowupAnswerEvent
   | SSEErrorEvent
   | SSEDoneEvent;
 
@@ -225,9 +227,28 @@ export interface DataSourceInfo {
 export interface Message {
   id: string;
   query_id: string;
-  role: "user" | "agent" | "clarification" | "report";
+  role: "user" | "agent" | "clarification" | "report" | "followup" | "error";
   content: Record<string, unknown>;
   created_at: string;
+}
+
+export interface FollowupCitation {
+  source_name: string;
+  title: string;
+  url: string;
+  snippet: string;
+  ideological_lean: IdeologicalLean;
+}
+
+export interface FollowupAnswerData {
+  answer: string;
+  citations: FollowupCitation[];
+  thread_id: string;
+}
+
+export interface SSEFollowupAnswerEvent {
+  type: "followup_answer";
+  data: FollowupAnswerData;
 }
 
 export interface QueryInfo {

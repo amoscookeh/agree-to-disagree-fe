@@ -4,14 +4,10 @@ interface UserMessageProps {
   isResponse?: boolean;
 }
 
-export function UserMessage({
-  query,
-  timestamp,
-  isResponse,
-}: UserMessageProps) {
+export function UserMessage({ query, timestamp }: UserMessageProps) {
   return (
     <div
-      className={`bg-zinc-800/50 border border-zinc-700 rounded-lg p-4 ${isResponse ? "ml-8" : ""}`}
+      className={`bg-zinc-800/50 border border-zinc-700 rounded-lg p-4 ml-8`}
     >
       <div className="flex items-center gap-2 mb-2 text-xs text-zinc-500">
         <span>You</span>

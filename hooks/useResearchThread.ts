@@ -6,6 +6,7 @@ import type {
   ProgressData,
   ReportData,
   ErrorData,
+  FollowupAnswerData,
 } from "@/lib/types";
 
 type ThreadEvent =
@@ -13,10 +14,17 @@ type ThreadEvent =
   | { type: "progress"; data: ProgressData }
   | { type: "clarification"; data: ClarificationData }
   | { type: "user_response"; response: string; timestamp: string }
-  | { type: "report"; data: ReportData };
+  | { type: "report"; data: ReportData }
+  | { type: "followup_answer"; data: FollowupAnswerData };
 
 interface ThreadState {
-  status: "idle" | "clarifying" | "researching" | "complete" | "error";
+  status:
+    | "idle"
+    | "clarifying"
+    | "researching"
+    | "followup"
+    | "complete"
+    | "error";
   threadId: string | null;
   queryId: string | null;
   events: ThreadEvent[];
@@ -25,11 +33,13 @@ interface ThreadState {
 
 type ThreadAction =
   | { type: "START_RESEARCH"; query: string }
+  | { type: "START_FOLLOWUP"; query: string }
   | { type: "SET_THREAD"; threadId: string; queryId: string }
   | { type: "ADD_PROGRESS"; data: ProgressData }
   | { type: "SET_CLARIFICATION"; data: ClarificationData }
   | { type: "SUBMIT_CLARIFICATION"; response: string }
   | { type: "SET_REPORT"; data: ReportData }
+  | { type: "SET_FOLLOWUP_ANSWER"; data: FollowupAnswerData }
   | { type: "SET_ERROR"; data: ErrorData }
   | { type: "RESET" };
 
@@ -49,6 +59,21 @@ function threadReducer(state: ThreadState, action: ThreadAction): ThreadState {
         error: null,
       };
 
+    case "START_FOLLOWUP":
+      return {
+        ...state,
+        status: "followup",
+        events: [
+          ...state.events,
+          {
+            type: "user_query",
+            query: action.query,
+            timestamp: new Date().toISOString(),
+          },
+        ],
+        error: null,
+      };
+
     case "SET_THREAD":
       return {
         ...state,
@@ -59,7 +84,7 @@ function threadReducer(state: ThreadState, action: ThreadAction): ThreadState {
     case "ADD_PROGRESS":
       return {
         ...state,
-        status: "researching",
+        status: state.status === "followup" ? "followup" : "researching",
         events: [...state.events, { type: "progress", data: action.data }],
       };
 
@@ -89,6 +114,16 @@ function threadReducer(state: ThreadState, action: ThreadAction): ThreadState {
         ...state,
         status: "complete",
         events: [...state.events, { type: "report", data: action.data }],
+      };
+
+    case "SET_FOLLOWUP_ANSWER":
+      return {
+        ...state,
+        status: "complete",
+        events: [
+          ...state.events,
+          { type: "followup_answer", data: action.data },
+        ],
       };
 
     case "SET_ERROR":
@@ -148,6 +183,9 @@ export function useResearchThread(options: UseResearchThreadOptions = {}) {
         break;
       case "report":
         dispatch({ type: "SET_REPORT", data: event.data });
+        break;
+      case "followup_answer":
+        dispatch({ type: "SET_FOLLOWUP_ANSWER", data: event.data });
         break;
       case "error":
         dispatch({ type: "SET_ERROR", data: event.data });
