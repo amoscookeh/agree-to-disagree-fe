@@ -19,28 +19,48 @@ export function useResearch(options: UseResearchOptions = {}) {
     queryId: null,
     clarification: null,
     progress: [],
+    subQueries: [],
+    drafts: [],
+    currentCycle: 0,
+    supervisorDecisions: [],
     report: null,
     error: null,
   });
   const [originalQuery, setOriginalQuery] = useState<string>("");
 
   const startResearch = useCallback(
-    async (query: string, clarificationResponse?: string) => {
+    async (
+      query: string,
+      clarificationResponse?: string,
+      threadId?: string
+    ) => {
       if (!clarificationResponse) {
         setOriginalQuery(query);
+        setState({
+          status: "researching",
+          threadId: null,
+          queryId: null,
+          clarification: null,
+          progress: [],
+          subQueries: [],
+          drafts: [],
+          currentCycle: 0,
+          supervisorDecisions: [],
+          report: null,
+          error: null,
+        });
+      } else {
+        setState((prev) => ({
+          ...prev,
+          status: "researching",
+        }));
       }
 
-      setState({
-        status: "researching",
-        threadId: null,
-        queryId: null,
-        clarification: null,
-        progress: [],
-        report: null,
-        error: null,
-      });
-
-      for await (const event of stream.stream(query, clarificationResponse)) {
+      for await (const event of stream.stream(
+        query,
+        clarificationResponse,
+        threadId
+      )) {
         handleEvent(event);
       }
     },
@@ -71,6 +91,29 @@ export function useResearch(options: UseResearchOptions = {}) {
           ...prev,
           status: "researching",
           progress: [...prev.progress, event.data],
+        }));
+        break;
+
+      case "sub_queries":
+        setState((prev) => ({
+          ...prev,
+          subQueries: [...prev.subQueries, ...event.data.sub_queries],
+          currentCycle: event.data.cycle,
+        }));
+        break;
+
+      case "draft":
+        setState((prev) => ({
+          ...prev,
+          drafts: [...prev.drafts, event.data],
+        }));
+        break;
+
+      case "supervisor_decision":
+        setState((prev) => ({
+          ...prev,
+          supervisorDecisions: [...prev.supervisorDecisions, event.data],
+          currentCycle: event.data.cycle,
         }));
         break;
 
@@ -108,6 +151,10 @@ export function useResearch(options: UseResearchOptions = {}) {
       queryId: null,
       clarification: null,
       progress: [],
+      subQueries: [],
+      drafts: [],
+      currentCycle: 0,
+      supervisorDecisions: [],
       report: null,
       error: null,
     });
@@ -118,9 +165,9 @@ export function useResearch(options: UseResearchOptions = {}) {
     async (response: string) => {
       if (!state.clarification || !originalQuery) return;
 
-      await startResearch(originalQuery, response);
+      await startResearch(originalQuery, response, state.threadId || undefined);
     },
-    [state.clarification, originalQuery, startResearch]
+    [state.clarification, state.threadId, originalQuery, startResearch]
   );
 
   return {

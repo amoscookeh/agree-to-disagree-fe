@@ -7,6 +7,9 @@ import type {
   ReportData,
   ErrorData,
   FollowupAnswerData,
+  SubQueriesData,
+  DraftData,
+  SupervisorDecisionData,
 } from "@/lib/types";
 
 type ThreadEvent =
@@ -14,6 +17,9 @@ type ThreadEvent =
   | { type: "progress"; data: ProgressData }
   | { type: "clarification"; data: ClarificationData }
   | { type: "user_response"; response: string; timestamp: string }
+  | { type: "sub_queries"; data: SubQueriesData }
+  | { type: "draft"; data: DraftData }
+  | { type: "supervisor_decision"; data: SupervisorDecisionData }
   | { type: "report"; data: ReportData }
   | { type: "followup_answer"; data: FollowupAnswerData };
 
@@ -38,6 +44,9 @@ type ThreadAction =
   | { type: "ADD_PROGRESS"; data: ProgressData }
   | { type: "SET_CLARIFICATION"; data: ClarificationData }
   | { type: "SUBMIT_CLARIFICATION"; response: string }
+  | { type: "ADD_SUB_QUERIES"; data: SubQueriesData }
+  | { type: "ADD_DRAFT"; data: DraftData }
+  | { type: "ADD_SUPERVISOR_DECISION"; data: SupervisorDecisionData }
   | { type: "SET_REPORT"; data: ReportData }
   | { type: "SET_FOLLOWUP_ANSWER"; data: FollowupAnswerData }
   | { type: "SET_ERROR"; data: ErrorData }
@@ -106,6 +115,27 @@ function threadReducer(state: ThreadState, action: ThreadAction): ThreadState {
             response: action.response,
             timestamp: new Date().toISOString(),
           },
+        ],
+      };
+
+    case "ADD_SUB_QUERIES":
+      return {
+        ...state,
+        events: [...state.events, { type: "sub_queries", data: action.data }],
+      };
+
+    case "ADD_DRAFT":
+      return {
+        ...state,
+        events: [...state.events, { type: "draft", data: action.data }],
+      };
+
+    case "ADD_SUPERVISOR_DECISION":
+      return {
+        ...state,
+        events: [
+          ...state.events,
+          { type: "supervisor_decision", data: action.data },
         ],
       };
 
@@ -181,6 +211,15 @@ export function useResearchThread(options: UseResearchThreadOptions = {}) {
       case "clarification":
         dispatch({ type: "SET_CLARIFICATION", data: event.data });
         break;
+      case "sub_queries":
+        dispatch({ type: "ADD_SUB_QUERIES", data: event.data });
+        break;
+      case "draft":
+        dispatch({ type: "ADD_DRAFT", data: event.data });
+        break;
+      case "supervisor_decision":
+        dispatch({ type: "ADD_SUPERVISOR_DECISION", data: event.data });
+        break;
       case "report":
         dispatch({ type: "SET_REPORT", data: event.data });
         break;
@@ -201,7 +240,11 @@ export function useResearchThread(options: UseResearchThreadOptions = {}) {
   }, []);
 
   const startResearch = useCallback(
-    async (query: string, clarificationResponse?: string) => {
+    async (
+      query: string,
+      clarificationResponse?: string,
+      threadId?: string
+    ) => {
       if (!clarificationResponse) {
         dispatch({ type: "START_RESEARCH", query });
       } else {
@@ -211,7 +254,11 @@ export function useResearchThread(options: UseResearchThreadOptions = {}) {
         });
       }
 
-      for await (const event of stream.stream(query, clarificationResponse)) {
+      for await (const event of stream.stream(
+        query,
+        clarificationResponse,
+        threadId
+      )) {
         handleSSEEvent(event);
       }
     },
@@ -223,9 +270,13 @@ export function useResearchThread(options: UseResearchThreadOptions = {}) {
       const userQueryEvent = state.events.find((e) => e.type === "user_query");
       if (!userQueryEvent || userQueryEvent.type !== "user_query") return;
 
-      await startResearch(userQueryEvent.query, response);
+      await startResearch(
+        userQueryEvent.query,
+        response,
+        state.threadId || undefined
+      );
     },
-    [state.events, startResearch]
+    [state.events, state.threadId, startResearch]
   );
 
   const reset = useCallback(() => {
