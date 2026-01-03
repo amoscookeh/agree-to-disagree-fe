@@ -1,11 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import type { DraftData, SubQueryAngle } from "@/lib/types";
 
 interface DraftMessageProps {
   data: DraftData;
 }
+
+const SUMMARY_PREVIEW_LENGTH = 150;
 
 function AngleBadge({ angle }: { angle: SubQueryAngle }) {
   const styles: Record<SubQueryAngle, string> = {
@@ -23,6 +25,8 @@ function AngleBadge({ angle }: { angle: SubQueryAngle }) {
   return (
     <span
       className={`text-[10px] px-1.5 py-0.5 rounded border font-medium uppercase tracking-wider ${styles[angle]}`}
+      role="status"
+      aria-label={`${labels[angle]} perspective`}
     >
       {labels[angle]}
     </span>
@@ -31,19 +35,28 @@ function AngleBadge({ angle }: { angle: SubQueryAngle }) {
 
 export function DraftMessage({ data }: DraftMessageProps) {
   const [isExpanded, setIsExpanded] = useState(false);
+
+  const handleToggle = useCallback(() => {
+    setIsExpanded((prev) => !prev);
+  }, []);
+
   const summaryPreview =
-    data.summary.length > 150
-      ? `${data.summary.slice(0, 150)}...`
+    data.summary.length > SUMMARY_PREVIEW_LENGTH
+      ? `${data.summary.slice(0, SUMMARY_PREVIEW_LENGTH)}...`
       : data.summary;
 
   return (
-    <div className="border border-zinc-700/50 rounded-lg p-4 bg-zinc-800/30 mr-8">
-      <div className="flex items-center gap-2 mb-3 text-xs text-zinc-500">
+    <article
+      className="border border-zinc-700/50 rounded-lg p-4 bg-zinc-800/30 mr-8"
+      aria-label="Draft research finding"
+    >
+      <header className="flex items-center gap-2 mb-3 text-xs text-zinc-500">
         <svg
           className="w-4 h-4 text-teal-500"
           fill="none"
           stroke="currentColor"
           viewBox="0 0 24 24"
+          aria-hidden="true"
         >
           <path
             strokeLinecap="round"
@@ -53,45 +66,51 @@ export function DraftMessage({ data }: DraftMessageProps) {
           />
         </svg>
         <span className="text-teal-500">Draft Finding</span>
-        <span>•</span>
+        <span aria-hidden="true">•</span>
         <AngleBadge angle={data.angle} />
-        <span>•</span>
+        <span aria-hidden="true">•</span>
         <span>{data.sources_count} sources</span>
-      </div>
+      </header>
 
-      <div className="mb-3">
-        <p className="text-zinc-400 text-xs mb-1">Investigated:</p>
+      <section className="mb-3">
+        <h4 className="text-zinc-400 text-xs mb-1">Investigated:</h4>
         <p className="text-zinc-200 text-sm">{data.sub_query}</p>
-      </div>
+      </section>
 
-      <div className="mb-3">
-        <p className="text-zinc-400 text-xs mb-1">Summary:</p>
+      <section className="mb-3">
+        <h4 className="text-zinc-400 text-xs mb-1">Summary:</h4>
         <p className="text-zinc-300 text-sm">
           {isExpanded ? data.summary : summaryPreview}
         </p>
-        {data.summary.length > 150 && (
+        {data.summary.length > SUMMARY_PREVIEW_LENGTH && (
           <button
-            onClick={() => setIsExpanded(!isExpanded)}
+            onClick={handleToggle}
             className="text-teal-500 text-xs mt-1 hover:text-teal-400"
+            aria-expanded={isExpanded}
           >
             {isExpanded ? "Show less" : "Show more"}
           </button>
         )}
-      </div>
+      </section>
 
       {data.key_findings.length > 0 && (
-        <div className="border-t border-zinc-700/50 pt-3 mt-3">
-          <p className="text-zinc-400 text-xs mb-2">Key findings:</p>
+        <section
+          className="border-t border-zinc-700/50 pt-3 mt-3"
+          aria-label="Key findings"
+        >
+          <h4 className="text-zinc-400 text-xs mb-2">Key findings:</h4>
           <ul className="space-y-1">
             {data.key_findings.map((finding, idx) => (
               <li key={idx} className="text-zinc-400 text-xs flex gap-2">
-                <span className="text-teal-500">•</span>
+                <span className="text-teal-500" aria-hidden="true">
+                  •
+                </span>
                 <span>{finding}</span>
               </li>
             ))}
           </ul>
-        </div>
+        </section>
       )}
-    </div>
+    </article>
   );
 }

@@ -1,4 +1,5 @@
 import type { FollowupCitation } from "@/lib/types";
+import { formatTimestamp } from "@/lib/dateUtils";
 
 interface FollowupMessageProps {
   answer: string;
@@ -12,13 +13,17 @@ export function FollowupMessage({
   timestamp,
 }: FollowupMessageProps) {
   return (
-    <div className="border border-teal-800/50 rounded-lg p-4 bg-teal-950/20 mr-8">
-      <div className="flex items-center gap-2 mb-3 text-xs text-teal-500">
+    <article
+      className="border border-teal-800/50 rounded-lg p-4 bg-teal-950/20 mr-8"
+      aria-label="Follow-up answer"
+    >
+      <header className="flex items-center gap-2 mb-3 text-xs text-teal-500">
         <svg
           className="w-4 h-4"
           fill="none"
           stroke="currentColor"
           viewBox="0 0 24 24"
+          aria-hidden="true"
         >
           <path
             strokeLinecap="round"
@@ -28,47 +33,52 @@ export function FollowupMessage({
           />
         </svg>
         <span>Follow-up Answer</span>
-        <span>•</span>
-        <span>{new Date(timestamp).toLocaleTimeString()}</span>
-      </div>
+        <span aria-hidden="true">•</span>
+        <time dateTime={timestamp}>{formatTimestamp(timestamp)}</time>
+      </header>
 
       <div className="text-zinc-300 text-sm whitespace-pre-wrap leading-relaxed">
         {answer}
       </div>
 
       {citations.length > 0 && (
-        <div className="mt-4 pt-3 border-t border-teal-800/30">
-          <p className="text-xs text-zinc-500 mb-2">Sources referenced:</p>
-          <div className="space-y-2">
+        <section
+          className="mt-4 pt-3 border-t border-teal-800/30"
+          aria-label="Sources referenced"
+        >
+          <h4 className="text-xs text-zinc-500 mb-2">Sources referenced:</h4>
+          <ul className="space-y-2">
             {citations.map((citation, idx) => (
-              <a
-                key={idx}
-                href={citation.url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="block p-2 rounded bg-zinc-800/50 hover:bg-zinc-800 transition-colors"
-              >
-                <div className="flex items-center gap-2">
-                  <span
-                    className={`text-xs px-1.5 py-0.5 rounded ${
-                      citation.ideological_lean === "left"
-                        ? "bg-blue-900/50 text-blue-400"
-                        : citation.ideological_lean === "right"
-                          ? "bg-red-900/50 text-red-400"
-                          : "bg-zinc-700 text-zinc-400"
-                    }`}
-                  >
-                    {citation.source_name}
-                  </span>
-                </div>
-                <p className="text-xs text-zinc-400 mt-1 line-clamp-2">
-                  {citation.title || citation.snippet}
-                </p>
-              </a>
+              <li key={idx}>
+                <a
+                  href={citation.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="block p-2 rounded bg-zinc-800/50 hover:bg-zinc-800 transition-colors"
+                >
+                  <div className="flex items-center gap-2">
+                    <span
+                      className={`text-xs px-1.5 py-0.5 rounded ${
+                        citation.ideological_lean === "left"
+                          ? "bg-blue-900/50 text-blue-400"
+                          : citation.ideological_lean === "right"
+                            ? "bg-red-900/50 text-red-400"
+                            : "bg-zinc-700 text-zinc-400"
+                      }`}
+                    >
+                      {citation.source_name}
+                    </span>
+                  </div>
+                  <p className="text-xs text-zinc-400 mt-1 line-clamp-2">
+                    {citation.title || citation.snippet}
+                  </p>
+                  <span className="sr-only">(opens in new tab)</span>
+                </a>
+              </li>
             ))}
-          </div>
-        </div>
+          </ul>
+        </section>
       )}
-    </div>
+    </article>
   );
 }

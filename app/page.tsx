@@ -1,17 +1,22 @@
 "use client";
 
-import { useState, useEffect, useRef, useMemo } from "react";
+import { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { useResearchThread, type ThreadEvent } from "@/hooks/useResearchThread";
 import { useAuth } from "@/context/AuthContext";
-import { ChatInput } from "@/components/Chat/ChatInput";
-import { AuthModal } from "@/components/Auth/AuthModal";
-import { UserBadge } from "@/components/Auth/UserBadge";
-import { UserMessage } from "@/components/Thread/UserMessage";
-import { AgentUpdate } from "@/components/Thread/AgentUpdate";
-import { ClarificationMessage } from "@/components/Thread/ClarificationMessage";
-import { ReportMessage } from "@/components/Thread/ReportMessage";
-import { ChatHistory } from "@/components/Sidebar/HistorySidebar";
+import { ChatInput } from "@/components/Chat";
+import { AuthModal, UserBadge } from "@/components/Auth";
+import {
+  UserMessage,
+  ClarificationMessage,
+  ReportMessage,
+  FollowupMessage,
+  SubQueriesMessage,
+  DraftMessage,
+  SupervisorDecisionMessage,
+  ProgressLogGroupFromEvents,
+} from "@/components/Thread";
+import { ChatHistory } from "@/components/Sidebar";
 import type {
   ProgressData,
   ReportData,
@@ -20,56 +25,6 @@ import type {
   DraftData,
   SupervisorDecisionData,
 } from "@/lib/types";
-import { FollowupMessage } from "@/components/Thread/FollowupMessage";
-import { SubQueriesMessage } from "@/components/Thread/SubQueriesMessage";
-import { DraftMessage } from "@/components/Thread/DraftMessage";
-import { SupervisorDecisionMessage } from "@/components/Thread/SupervisorDecisionMessage";
-
-function ProgressLogGroup({
-  events,
-  title,
-  defaultOpen,
-}: {
-  events: ProgressData[];
-  title: string;
-  defaultOpen: boolean;
-}) {
-  const [isOpen, setIsOpen] = useState(defaultOpen);
-
-  if (events.length === 0) return null;
-
-  return (
-    <div className="border border-zinc-700 rounded-lg overflow-hidden mr-8">
-      <button
-        onClick={() => setIsOpen(!isOpen)}
-        className="w-full px-4 py-3 bg-zinc-800/50 hover:bg-zinc-800 transition-colors flex items-center justify-between"
-      >
-        <div className="flex items-center gap-2">
-          <span className="text-sm font-medium text-zinc-300">{title}</span>
-          <span className="text-xs text-zinc-500">
-            ({events.length} events)
-          </span>
-        </div>
-        <span className="text-zinc-500">{isOpen ? "▼" : "▶"}</span>
-      </button>
-      {isOpen && (
-        <div className="p-4 space-y-3 bg-zinc-900/30">
-          {events.map((p, idx) => (
-            <AgentUpdate
-              key={idx}
-              agent={p.agent}
-              status={p.status}
-              message={p.message}
-              details={p.details}
-              toolCalls={p.tool_calls}
-              timestamp={p.timestamp}
-            />
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
 
 type GroupedEvent =
   | { type: "user_query"; query: string; timestamp: string }
@@ -249,29 +204,47 @@ export default function Home() {
     }
   }, [user, token, pendingQuery, isQuotaExhausted, router, startResearch]);
 
-  const handleStartResearch = (query: string) => {
-    if (!user) {
-      hasProcessedQuery.current = false;
-      setPendingQuery(query);
-      setShowAuthModal(true);
-      return;
-    }
+  const handleStartResearch = useCallback(
+    (query: string) => {
+      if (!user) {
+        hasProcessedQuery.current = false;
+        setPendingQuery(query);
+        setShowAuthModal(true);
+        return;
+      }
 
-    if (isQuotaExhausted) {
-      router.push("/waitlist");
-      return;
-    }
+      if (isQuotaExhausted) {
+        router.push("/waitlist");
+        return;
+      }
 
-    startResearch(query);
-  };
+      startResearch(query);
+    },
+    [user, isQuotaExhausted, router, startResearch]
+  );
 
-  const handleClarificationSubmit = (response: string) => {
-    submitClarification(response);
-  };
+  const handleClarificationSubmit = useCallback(
+    (response: string) => {
+      submitClarification(response);
+    },
+    [submitClarification]
+  );
 
-  const handleReset = () => {
+  const handleReset = useCallback(() => {
     reset();
-  };
+  }, [reset]);
+
+  const handleSidebarToggle = useCallback(() => {
+    setSidebarOpen((prev) => !prev);
+  }, []);
+
+  const handleCloseAuthModal = useCallback(() => {
+    setShowAuthModal(false);
+  }, []);
+
+  const handleOpenAuthModal = useCallback(() => {
+    setShowAuthModal(true);
+  }, []);
 
   const groupedEvents = useMemo(() => groupEvents(events), [events]);
 
@@ -279,13 +252,13 @@ export default function Home() {
     <div className="min-h-screen bg-[#0a0a0a] text-zinc-100 relative">
       <AuthModal
         isOpen={showAuthModal}
-        onClose={() => setShowAuthModal(false)}
-        onSuccess={() => setShowAuthModal(false)}
+        onClose={handleCloseAuthModal}
+        onSuccess={handleCloseAuthModal}
       />
 
       <ChatHistory
         isOpen={sidebarOpen && !!user}
-        onToggle={() => setSidebarOpen(!sidebarOpen)}
+        onToggle={handleSidebarToggle}
       />
 
       <div
@@ -301,7 +274,7 @@ export default function Home() {
                 <UserBadge />
               ) : (
                 <button
-                  onClick={() => setShowAuthModal(true)}
+                  onClick={handleOpenAuthModal}
                   className="bg-teal-600 hover:bg-teal-500 text-white px-4 py-2 rounded font-medium text-sm"
                 >
                   Sign In
@@ -310,7 +283,13 @@ export default function Home() {
             </div>
           )}
 
-          {status === "idle" && (
+          {isLoading && (
+            <div className="flex-1 flex items-center justify-center">
+              <div className="loading loading-spinner loading-lg text-teal-500"></div>
+            </div>
+          )}
+
+          {!isLoading && status === "idle" && (
             <div className="flex-1 flex flex-col items-center justify-center">
               <div className="text-center mb-16">
                 <h1 className="text-6xl font-bold mb-4 tracking-tight">
@@ -323,7 +302,7 @@ export default function Home() {
             </div>
           )}
 
-          {isActive && (
+          {!isLoading && isActive && (
             <div className="flex-1 mb-8">
               <div className="mb-8">
                 <button
@@ -348,7 +327,7 @@ export default function Home() {
 
                     case "progress_group":
                       return (
-                        <ProgressLogGroup
+                        <ProgressLogGroupFromEvents
                           key={idx}
                           events={event.events}
                           title={
@@ -446,19 +425,21 @@ export default function Home() {
             </div>
           )}
 
-          <div className="mt-auto pt-8">
-            <ChatInput
-              onSubmit={
-                isClarifying ? handleClarificationSubmit : handleStartResearch
-              }
-              disabled={isResearching}
-              placeholder={
-                isClarifying
-                  ? "Provide more details about what you're looking for..."
-                  : "What should we explore today?"
-              }
-            />
-          </div>
+          {!isLoading && (
+            <div className="mt-auto pt-8">
+              <ChatInput
+                onSubmit={
+                  isClarifying ? handleClarificationSubmit : handleStartResearch
+                }
+                disabled={isResearching}
+                placeholder={
+                  isClarifying
+                    ? "Provide more details about what you're looking for..."
+                    : "What should we explore today?"
+                }
+              />
+            </div>
+          )}
         </div>
       </div>
     </div>

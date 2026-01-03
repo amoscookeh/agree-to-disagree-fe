@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect, useState, useMemo, useCallback } from "react";
+import { useEffect, useState, useMemo, useCallback, useRef } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
 import { fetchChat } from "@/lib/api";
 import { config } from "@/lib/config";
+import { formatDateTime } from "@/lib/dateUtils";
 import type {
   ChatThread,
   Message,
@@ -12,116 +13,20 @@ import type {
   SubQueriesData,
   DraftData,
   SupervisorDecisionData,
-  ToolCall,
 } from "@/lib/types";
-import { UserMessage } from "@/components/Thread/UserMessage";
-import { AgentUpdate } from "@/components/Thread/AgentUpdate";
-import { ClarificationMessage } from "@/components/Thread/ClarificationMessage";
-import { ReportMessage } from "@/components/Thread/ReportMessage";
-import { FollowupMessage } from "@/components/Thread/FollowupMessage";
-import { SubQueriesMessage } from "@/components/Thread/SubQueriesMessage";
-import { DraftMessage } from "@/components/Thread/DraftMessage";
-import { SupervisorDecisionMessage } from "@/components/Thread/SupervisorDecisionMessage";
-import { ChatInput } from "@/components/Chat/ChatInput";
-
-interface NormalizedProgress {
-  agent: string;
-  status: string;
-  message: string;
-  details?: Record<string, unknown>;
-  toolCalls?: ToolCall[];
-}
-
-function normalizeProgressMessage(msg: Message): NormalizedProgress {
-  const content = msg.content;
-
-  // format 2: nested under content.data
-  const data = content.data as Record<string, unknown> | undefined;
-  if (data && typeof data === "object" && data.agent) {
-    // handle singular tool_call -> array
-    const toolCall = content.tool_call as ToolCall | undefined;
-    const toolCalls = toolCall ? [toolCall] : undefined;
-
-    return {
-      agent: (data.agent as string) || "",
-      status: (data.status as string) || "",
-      message: (data.message as string) || "",
-      details: data.details as Record<string, unknown> | undefined,
-      toolCalls,
-    };
-  }
-
-  // format 1: flat structure
-  // handle singular tool_call -> array
-  const toolCall = content.tool_call as ToolCall | undefined;
-  const toolCallsArray = content.tool_calls as ToolCall[] | undefined;
-  const toolCalls = toolCallsArray || (toolCall ? [toolCall] : undefined);
-
-  return {
-    agent: (content.agent as string) || "",
-    status: (content.status as string) || "",
-    message: (content.message as string) || "",
-    details: content.details as Record<string, unknown> | undefined,
-    toolCalls,
-  };
-}
-
-function getAgentFromMessage(msg: Message): string {
-  const data = msg.content.data as Record<string, unknown> | undefined;
-  if (data && typeof data === "object" && data.agent) {
-    return data.agent as string;
-  }
-  return (msg.content.agent as string) || "";
-}
-
-function ProgressLogGroup({
-  messages,
-  title,
-  defaultOpen,
-}: {
-  messages: Message[];
-  title: string;
-  defaultOpen: boolean;
-}) {
-  const [isOpen, setIsOpen] = useState(defaultOpen);
-
-  if (messages.length === 0) return null;
-
-  return (
-    <div className="border border-zinc-700 rounded-lg overflow-hidden mr-8">
-      <button
-        onClick={() => setIsOpen(!isOpen)}
-        className="w-full px-4 py-3 bg-zinc-800/50 hover:bg-zinc-800 transition-colors flex items-center justify-between"
-      >
-        <div className="flex items-center gap-2">
-          <span className="text-sm font-medium text-zinc-300">{title}</span>
-          <span className="text-xs text-zinc-500">
-            ({messages.length} events)
-          </span>
-        </div>
-        <span className="text-zinc-500">{isOpen ? "▼" : "▶"}</span>
-      </button>
-      {isOpen && (
-        <div className="p-4 space-y-3 bg-zinc-900/30">
-          {messages.map((msg) => {
-            const normalized = normalizeProgressMessage(msg);
-            return (
-              <AgentUpdate
-                key={msg.id}
-                agent={normalized.agent}
-                status={normalized.status}
-                message={normalized.message}
-                details={normalized.details}
-                toolCalls={normalized.toolCalls}
-                timestamp={msg.created_at}
-              />
-            );
-          })}
-        </div>
-      )}
-    </div>
-  );
-}
+import {
+  UserMessage,
+  ClarificationMessage,
+  ReportMessage,
+  FollowupMessage,
+  SubQueriesMessage,
+  DraftMessage,
+  SupervisorDecisionMessage,
+  ProgressLogGroupFromMessages,
+  getAgentFromMessage,
+  normalizeProgressMessage,
+} from "@/components/Thread";
+import { ChatInput } from "@/components/Chat";
 
 type GroupedEvent =
   | { type: "user_query"; query: string; timestamp: string }
@@ -370,6 +275,16 @@ export default function ChatPage() {
   const [followupError, setFollowupError] = useState<string | null>(null);
   const [pendingFollowup, setPendingFollowup] =
     useState<PendingFollowup | null>(null);
+  const abortControllerRef = useRef<AbortController | null>(null);
+
+  // cleanup on unmount
+  useEffect(() => {
+    return () => {
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
+    };
+  }, []);
 
   const loadChat = useCallback(async () => {
     if (!token || !id) return;
@@ -392,94 +307,114 @@ export default function ChatPage() {
     loadChat();
   }, [token, id, isLoading, user, router, loadChat]);
 
-  const handleFollowup = async (question: string) => {
-    if (!token || !chat?.query.thread_id) return;
+  const handleFollowup = useCallback(
+    async (question: string) => {
+      if (!token || !chat?.query.thread_id) return;
 
-    setIsSubmittingFollowup(true);
-    setFollowupError(null);
+      // cancel any existing request
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
+      abortControllerRef.current = new AbortController();
 
-    // optimistically show user message immediately
-    const timestamp = new Date().toISOString();
-    setPendingFollowup({
-      question,
-      timestamp,
-      progressEvents: [],
-    });
+      setIsSubmittingFollowup(true);
+      setFollowupError(null);
 
-    try {
-      const res = await fetch(`${config.apiUrl}/api/research`, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-          Accept: "text/event-stream",
-        },
-        body: JSON.stringify({
-          query: question,
-          thread_id: chat.query.thread_id,
-        }),
+      // optimistically show user message immediately
+      const timestamp = new Date().toISOString();
+      setPendingFollowup({
+        question,
+        timestamp,
+        progressEvents: [],
       });
 
-      if (!res.ok) {
-        throw new Error("Failed to submit follow-up");
-      }
+      try {
+        const res = await fetch(`${config.apiUrl}/api/research`, {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+            Accept: "text/event-stream",
+          },
+          body: JSON.stringify({
+            query: question,
+            thread_id: chat.query.thread_id,
+          }),
+          signal: abortControllerRef.current.signal,
+        });
 
-      const reader = res.body?.getReader();
-      if (!reader) throw new Error("No response body");
+        if (!res.ok) {
+          throw new Error("Failed to submit follow-up");
+        }
 
-      const decoder = new TextDecoder();
-      let buffer = "";
+        const reader = res.body?.getReader();
+        if (!reader) throw new Error("No response body");
 
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
+        const decoder = new TextDecoder();
+        let buffer = "";
 
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split("\n");
-        buffer = lines.pop() || "";
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
 
-        for (const line of lines) {
-          if (line.startsWith("data: ")) {
-            const jsonStr = line.slice(6);
-            if (jsonStr.trim()) {
-              try {
-                const event = JSON.parse(jsonStr);
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split("\n");
+          buffer = lines.pop() || "";
 
-                if (event.type === "progress") {
-                  // add progress event to pending state
-                  const progressMsg: Message = {
-                    id: `pending-${Date.now()}-${Math.random()}`,
-                    query_id: chat.query.id,
-                    role: "agent",
-                    content: event.data || event,
-                    created_at: new Date().toISOString(),
-                  };
-                  setPendingFollowup((prev) =>
-                    prev
-                      ? {
-                          ...prev,
-                          progressEvents: [...prev.progressEvents, progressMsg],
-                        }
-                      : null
-                  );
-                } else if (event.type === "done") {
-                  setPendingFollowup(null);
-                  await loadChat();
+          for (const line of lines) {
+            if (line.startsWith("data: ")) {
+              const jsonStr = line.slice(6);
+              if (jsonStr.trim()) {
+                try {
+                  const event = JSON.parse(jsonStr);
+
+                  if (event.type === "progress") {
+                    // add progress event to pending state
+                    const progressMsg: Message = {
+                      id: `pending-${Date.now()}-${Math.random()}`,
+                      query_id: chat.query.id,
+                      role: "agent",
+                      content: event.data || event,
+                      created_at: new Date().toISOString(),
+                    };
+                    setPendingFollowup((prev) =>
+                      prev
+                        ? {
+                            ...prev,
+                            progressEvents: [
+                              ...prev.progressEvents,
+                              progressMsg,
+                            ],
+                          }
+                        : null
+                    );
+                  } else if (event.type === "done") {
+                    setPendingFollowup(null);
+                    await loadChat();
+                  }
+                } catch {
+                  // ignore parse errors
                 }
-              } catch {
-                // ignore parse errors
               }
             }
           }
         }
+      } catch (err) {
+        // don't show error if request was aborted
+        if (err instanceof Error && err.name === "AbortError") {
+          return;
+        }
+        setFollowupError(
+          err instanceof Error ? err.message : "Failed to submit"
+        );
+        setPendingFollowup(null);
+      } finally {
+        setIsSubmittingFollowup(false);
+        abortControllerRef.current = null;
       }
-    } catch (err) {
-      setFollowupError(err instanceof Error ? err.message : "Failed to submit");
-      setPendingFollowup(null);
-    } finally {
-      setIsSubmittingFollowup(false);
-    }
-  };
+    },
+    [token, chat, loadChat]
+  );
 
   const groupedEvents = useMemo(() => {
     const events = chat ? buildGroupedEvents(chat) : [];
@@ -549,7 +484,7 @@ export default function ChatPage() {
           </button>
           <h1 className="text-2xl font-bold">{chat.query.title}</h1>
           <p className="text-zinc-500 text-sm mt-1">
-            {new Date(chat.query.created_at).toLocaleString()}
+            {formatDateTime(chat.query.created_at)}
           </p>
         </div>
 
@@ -567,7 +502,7 @@ export default function ChatPage() {
 
               case "progress_group":
                 return (
-                  <ProgressLogGroup
+                  <ProgressLogGroupFromMessages
                     key={idx}
                     messages={event.messages}
                     title={
