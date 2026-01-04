@@ -260,7 +260,7 @@ export default function Home() {
   }, [events.length, isActive]);
 
   return (
-    <div className="min-h-screen bg-[#0a0a0a] text-zinc-100 relative">
+    <div className="min-h-screen text-zinc-100 relative">
       <AuthModal
         isOpen={showAuthModal}
         onClose={handleCloseAuthModal}
@@ -302,12 +302,12 @@ export default function Home() {
 
           {!isLoading && status === "idle" && (
             <div className="flex-1 flex flex-col items-center justify-center">
-              <div className="text-center mb-16">
-                <h1 className="text-6xl font-bold mb-4 tracking-tight">
+              <div className="text-center mb-16 max-w-2xl">
+                <h1 className="text-6xl font-bold mb-6 tracking-tight">
                   Agree <span className="text-teal-500">2</span> Disagree
                 </h1>
-                <p className="text-zinc-500 text-lg">
-                  What should we explore today?
+                <p className="text-zinc-400 text-lg leading-relaxed">
+                  deep research on american politics from all sides
                 </p>
               </div>
             </div>

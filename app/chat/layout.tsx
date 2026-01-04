@@ -13,7 +13,7 @@ export default function ChatLayout({
   const [sidebarOpen, setSidebarOpen] = useState(true);
 
   return (
-    <div className="min-h-screen bg-[#0a0a0a]">
+    <div className="min-h-screen">
       <ChatHistory
         isOpen={sidebarOpen && !!user}
         onToggle={() => setSidebarOpen(!sidebarOpen)}
