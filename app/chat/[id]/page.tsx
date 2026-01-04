@@ -458,7 +458,7 @@ export default function ChatPage() {
 
   if (loading || isLoading) {
     return (
-      <div className="min-h-screen bg-[#0a0a0a] flex items-center justify-center">
+      <div className="min-h-screen flex items-center justify-center">
         <div className="flex flex-col items-center gap-4">
           <p className="text-zinc-500 text-sm">Loading chat...</p>
         </div>
@@ -468,7 +468,7 @@ export default function ChatPage() {
 
   if (error) {
     return (
-      <div className="min-h-screen bg-[#0a0a0a] flex items-center justify-center">
+      <div className="min-h-screen flex items-center justify-center">
         <div className="text-center">
           <p className="text-red-400 mb-4">{error}</p>
           <button
@@ -484,14 +484,14 @@ export default function ChatPage() {
 
   if (!chat) {
     return (
-      <div className="min-h-screen bg-[#0a0a0a] flex items-center justify-center">
+      <div className="min-h-screen flex items-center justify-center">
         <p className="text-zinc-500">Chat not found</p>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-[#0a0a0a] text-zinc-100">
+    <div className="min-h-screen text-zinc-100">
       <div className="max-w-4xl mx-auto px-6 py-8">
         <div className="mb-8">
           <button
